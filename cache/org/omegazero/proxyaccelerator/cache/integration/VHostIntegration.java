@@ -23,7 +23,7 @@ public class VHostIntegration {
 
 	private Map<UpstreamServer, CacheConfig> configCache = new HashMap<>();
 
-	public CacheConfig getConfigOverride(UpstreamServer userver, CacheConfig defaultConfig) {
+	public synchronized CacheConfig getConfigOverride(UpstreamServer userver, CacheConfig defaultConfig) {
 		if(!(userver instanceof VirtualHost))
 			return null;
 
@@ -41,7 +41,7 @@ public class VHostIntegration {
 		return cc;
 	}
 
-	public void invalidate() {
+	public synchronized void invalidate() {
 		this.configCache.clear();
 	}
 }
