@@ -113,7 +113,7 @@ public class XForwardedForPlugin {
 			return;
 		}
 		String xff = http.getHeader("x-forwarded-for");
-		if(this.enableDownstream)
+		if(this.enableDownstream && downstreamConnection.getApparentRemoteAddress() == downstreamConnection.getRemoteAddress())
 			this.detectClientAddress(downstreamConnection, http, xff);
 		if(this.enableUpstream)
 			this.forwardClientAddress(downstreamConnection, http, xff);
