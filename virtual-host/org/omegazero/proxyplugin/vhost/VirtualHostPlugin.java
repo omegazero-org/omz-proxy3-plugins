@@ -95,7 +95,7 @@ public class VirtualHostPlugin {
 			throw new IllegalArgumentException("'address' must be a string");
 		InetAddress addr = InetAddress.getByName(addrr);
 		int plain = this.getTemplateValue("portPlain", host, template, 80, Integer.class);
-		int tls = this.getTemplateValue("portTls", host, template, 443, Integer.class);
+		int tls = this.getTemplateValue("portTLS", host, template, 443, Integer.class);
 		if(plain <= 0 && tls <= 0)
 			throw new IllegalArgumentException("Upstream server " + addr + " requires either portPlain or portTLS");
 
