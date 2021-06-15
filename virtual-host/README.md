@@ -13,7 +13,7 @@ The required array named `hosts` is a property in the plugin configuration objec
 
 | Name | Type | Description | Required | Default value |
 | --- | --- | --- | --- | --- |
-| hostname | string / array(string) | The wildcard hostname(s) of this virtual host. | yes | `-` |
+| hostname | string / array(string) | The wildcard hostname(s) of this virtual host. This string may also contain a trailing path component, which will override the path configured below (e.g. "example.com/path/"). | yes | `-` |
 | path | string | Path base of this virtual host. The path is matched when the path in the HTTP request starts with this value. Must start with `/`. | no | / |
 | address | string | The address of the origin server. | yes | `-` |
 | portPlain | number | The port where the origin server is listening for plaintext HTTP requests. May be negative, in which case all requests will be forwarded to the HTTPS port below. | no | 80 |

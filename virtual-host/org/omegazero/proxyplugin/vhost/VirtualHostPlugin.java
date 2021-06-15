@@ -89,7 +89,17 @@ public class VirtualHostPlugin {
 		});
 	}
 
-	private VirtualHost getVHost(String hostname, String path, ConfigObject host, ConfigObject template) throws UnknownHostException {
+	private VirtualHost getVHost(String hostnamePath, String dpath, ConfigObject host, ConfigObject template) throws UnknownHostException {
+		String hostname;
+		String path;
+		int pathI = hostnamePath.indexOf('/');
+		if(pathI >= 0){
+			hostname = hostnamePath.substring(0, pathI);
+			path = hostnamePath.substring(pathI);
+		}else{
+			hostname = hostnamePath;
+			path = dpath;
+		}
 		String addrr = this.getTemplateValue("address", host, template, null, String.class);
 		if(addrr == null)
 			throw new IllegalArgumentException("'address' must be a string");
