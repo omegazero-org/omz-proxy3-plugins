@@ -20,9 +20,12 @@ import java.util.regex.Pattern;
 
 import org.omegazero.common.eventbus.EventBusSubscriber;
 import org.omegazero.common.eventbus.SubscribeEvent;
+import org.omegazero.common.logging.Logger;
+import org.omegazero.common.logging.LoggerUtil;
 import org.omegazero.net.socket.SocketConnection;
 import org.omegazero.proxy.config.ConfigArray;
 import org.omegazero.proxy.config.ConfigObject;
+import org.omegazero.proxy.core.Proxy;
 import org.omegazero.proxy.http.HTTPMessage;
 import org.omegazero.proxy.net.UpstreamServer;
 import org.omegazero.proxy.util.ProxyUtil;
@@ -30,62 +33,58 @@ import org.omegazero.proxy.util.ProxyUtil;
 @EventBusSubscriber
 public class CustomHeadersPlugin {
 
+	private static final Logger logger = LoggerUtil.createLogger();
+
 
 	private final List<Host> hosts = new ArrayList<>();
 
+	private VHostIntegration pluginVhost;
 
 	public synchronized void configurationReload(ConfigObject config) {
 		this.hosts.clear();
 		for(String hostname : config.keySet()){
-			Host host = new Host(hostname);
 			ConfigArray headers = config.getArray(hostname);
-			for(Object obj : headers){
-				if(!(obj instanceof ConfigObject))
-					throw new IllegalArgumentException("Values in '" + hostname + "' must be objects");
-				ConfigObject headerObj = (ConfigObject) obj;
-				int direction = resolveDirection(headerObj.getString("direction"));
-				int mode = resolveMode(headerObj.optString("mode", "keep"));
-				Header header = new Header(headerObj.getString("key").toLowerCase(), headerObj.getString("value"), direction, mode);
-				if((header.mode & (Header.MODE_APPEND | Header.MODE_PREPEND)) != 0)
-					header.separator = headerObj.getString("separator");
-				ConfigObject reqObj = headerObj.optObject("requiredHeaders");
-				if(reqObj != null){
-					for(String rhkey : reqObj.keySet()){
-						String v = reqObj.getString(rhkey);
-						header.requiredHeaders.put(rhkey.toLowerCase(), v != null ? Pattern.compile(v) : null);
-					}
-				}
-				host.headers.add(header);
-			}
+			Host host = new Host(hostname, fromConfigArray(headers));
 			this.hosts.add(host);
 		}
+
+		if(this.pluginVhost == null && Proxy.getInstance().isPluginLoaded("vhost")){
+			logger.debug("Detected that vhost is loaded");
+			this.pluginVhost = new VHostIntegration();
+		}else if(this.pluginVhost != null)
+			this.pluginVhost.invalidate();
 	}
 
 
 	@SubscribeEvent
 	public void onHTTPRequest(SocketConnection downstreamConnection, HTTPMessage request, UpstreamServer userver) {
-		this.addHeaders(request, true);
+		this.addHeaders(request, userver, true);
 	}
 
 	@SubscribeEvent
-	public void onHTTPResponse(SocketConnection downstreamConnection, SocketConnection upstreamConnection, HTTPMessage response, UpstreamServer upstreamServer) {
-		this.addHeaders(response, false);
+	public void onHTTPResponse(SocketConnection downstreamConnection, SocketConnection upstreamConnection, HTTPMessage response, UpstreamServer userver) {
+		this.addHeaders(response, userver, false);
 	}
 
 
-	private synchronized void addHeaders(HTTPMessage msg, boolean up) {
+	private synchronized void addHeaders(HTTPMessage msg, UpstreamServer userver, boolean up) {
 		String hostname = msg.isRequest() ? msg.getAuthority() : msg.getCorrespondingMessage().getAuthority();
 		if(hostname == null)
 			return;
 		for(Host h : this.hosts){
 			if(ProxyUtil.hostMatches(h.expr, hostname)){
-				this.addHeadersFromHost(h, msg, up);
+				this.addHeadersFromList(h.headers, msg, up);
 			}
+		}
+		if(this.pluginVhost != null){
+			List<Header> vhostHeaders = this.pluginVhost.getHostHeaders(userver);
+			if(vhostHeaders != null)
+				this.addHeadersFromList(vhostHeaders, msg, up);
 		}
 	}
 
-	private void addHeadersFromHost(Host host, HTTPMessage msg, boolean up) {
-		for(Header header : host.headers){
+	private void addHeadersFromList(List<Header> headers, HTTPMessage msg, boolean up) {
+		for(Header header : headers){
 			if((up && (header.direction & Header.DIRECTION_UP) == 0) || (!up && (header.direction & Header.DIRECTION_DOWN) == 0))
 				continue;
 			String prevVal = msg.getHeader(header.key);
@@ -95,7 +94,9 @@ public class CustomHeadersPlugin {
 			for(Entry<String, Pattern> rh : header.requiredHeaders.entrySet()){
 				String val = msg.getHeader(rh.getKey());
 				Pattern pattern = rh.getValue();
-				if(pattern == null){
+				if(pattern == null && val == null){
+					continue;
+				}else if((pattern == null && val != null) || (pattern != null && val == null)){
 					if(val != null){
 						rhe = false;
 						break;
@@ -122,6 +123,30 @@ public class CustomHeadersPlugin {
 		}
 	}
 
+
+	public static List<Header> fromConfigArray(ConfigArray arr) {
+		List<Header> headers = new ArrayList<>();
+		for(Object obj : arr){
+			if(!(obj instanceof ConfigObject))
+				throw new IllegalArgumentException("Values in customheaders array must be objects");
+			ConfigObject headerObj = (ConfigObject) obj;
+			int direction = resolveDirection(headerObj.getString("direction"));
+			int mode = resolveMode(headerObj.optString("mode", "keep"));
+			String value = headerObj.getString("value");
+			Header header = new Header(headerObj.getString("key").toLowerCase(), value.length() > 0 ? value : null, direction, mode);
+			if((header.mode & (Header.MODE_APPEND | Header.MODE_PREPEND)) != 0)
+				header.separator = headerObj.getString("separator");
+			ConfigObject reqObj = headerObj.optObject("requiredHeaders");
+			if(reqObj != null){
+				for(String rhkey : reqObj.keySet()){
+					String v = reqObj.getString(rhkey);
+					header.requiredHeaders.put(rhkey.toLowerCase(), v != null ? Pattern.compile(v) : null);
+				}
+			}
+			headers.add(header);
+		}
+		return headers;
+	}
 
 	private static int resolveDirection(String val) {
 		switch(val){
@@ -161,14 +186,15 @@ public class CustomHeadersPlugin {
 	private static class Host {
 
 		private final String expr;
-		private final List<Header> headers = new ArrayList<>();
+		private final List<Header> headers;
 
-		public Host(String expr) {
+		public Host(String expr, List<Header> headers) {
 			this.expr = expr;
+			this.headers = headers;
 		}
 	}
 
-	private static class Header {
+	protected static class Header {
 
 		private static final int DIRECTION_UP = 1;
 		private static final int DIRECTION_DOWN = 2;

@@ -7,7 +7,7 @@ Allows custom HTTP headers to be set in the configuration file.
 
 Configuration ID: `customheaders`
 
-The plugin configuration object consists of any number of arrays, where the key is a wildcard hostname for which requests the headers should be added. The values in the arrays must be objects with the following properties:
+The plugin configuration object consists of any number of arrays, where the key is a wildcard hostname for which requests to the headers should be added. The values in the arrays must be objects with the following properties:
 
 | Name | Type | Description | Required | Default value |
 | --- | --- | --- | --- | --- |
@@ -59,5 +59,9 @@ These are the values that may be set for the `mode` property:
 ```
 
 This configuration adds "1.1 omz-proxy" to an existing `Via` header on all HTTP messages for any host, separated by `, `, or creates the header with that value (note that *omz-proxy* already adds this header by default). It also adds a `X-Powered-By` header with the given value for all responses, if it did not exist. Finally, for all subdomains of "example.com", an additional `Strict-Transport-Security` header is added or set to the given value.
+
+### VirtualHost plugin integration
+
+This plugin provides an integration with the *VirtualHost* plugin. Each virtual host object may contain an array named `customheaders` which contains objects of the same format as defined above.
 
 
