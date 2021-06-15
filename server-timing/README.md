@@ -12,6 +12,7 @@ Configuration ID: `servertiming`
 | metricDesc | string | The value of the `desc` (description) directive. If `null`, the directive will not be included. | no | null |
 | metricName | string | The name of the metric. | no | "proxy-timing" |
 | addStart | boolean | Whether the new metric should be appended to the front of existing metrics, instead of the back. | no | true |
+| subtractOriginTiming | boolean | Whether any server timing reported by the upstream server should be subtracted from the measured time. | no | true |
 
 ### Example
 
