@@ -198,17 +198,11 @@ public class CachePlugin {
 
 	private void addHeaders(HTTPMessage msg, CacheEntry entry, boolean hit) {
 		msg.setHeader("age", hit ? String.valueOf(entry.age()) : "0");
-		this.appendHeader(msg, "x-cache", hit ? "HIT" : "MISS", ", ");
-		this.appendHeader(msg, "x-cache-lookup", entry != null ? "HIT" : "MISS", ", ");
-		this.appendHeader(msg, "x-cache-hits", entry != null ? String.valueOf(entry.getHits()) : "0", ", ");
+		msg.appendHeader("x-cache", hit ? "HIT" : "MISS", ", ");
+		msg.appendHeader("x-cache-lookup", entry != null ? "HIT" : "MISS", ", ");
+		msg.appendHeader("x-cache-hits", entry != null ? String.valueOf(entry.getHits()) : "0", ", ");
 		if(this.cacheName != null)
-			this.appendHeader(msg, "x-served-by", this.cacheServedByPrefix + this.cacheName, ", ");
-	}
-
-	private void appendHeader(HTTPMessage msg, String key, String value, String separator) {
-		String val = msg.getHeader(key);
-		val = ((val != null) ? (val + separator) : "") + value;
-		msg.setHeader(key, val);
+			msg.appendHeader("x-served-by", this.cacheServedByPrefix + this.cacheName, ", ");
 	}
 
 	private CacheConfig getConfigForRequest(HTTPMessage request) {
