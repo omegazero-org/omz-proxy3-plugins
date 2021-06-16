@@ -93,25 +93,6 @@ public class XForwardedForPlugin {
 
 	@SubscribeEvent(priority = Priority.HIGH)
 	public void onHTTPRequestPreLog(SocketConnection downstreamConnection, HTTPMessage http) {
-		boolean allowed = false;
-		if(this.allowedClients != null){
-			for(String s : this.allowedClients){
-				if(s.equals(((InetSocketAddress) downstreamConnection.getRemoteAddress()).getAddress().getHostAddress())){
-					allowed = true;
-					break;
-				}
-			}
-		}else{
-			allowed = true;
-		}
-		if(!allowed){
-			if(this.enforceAllowedClients){
-				logger.warn("Rejecting request with X-Forwarded-For header from disallowed client ", downstreamConnection.getRemoteAddress());
-				http.getEngine().respondError(http, HTTPCommon.STATUS_FORBIDDEN, "Forbidden", "Rejected by XFF settings.");
-			}else
-				logger.warn("Ignoring X-Forwarded-For header in request from disallowed client ", downstreamConnection.getRemoteAddress());
-			return;
-		}
 		String xff = http.getHeader("x-forwarded-for");
 		if(this.enableDownstream && downstreamConnection.getApparentRemoteAddress() == downstreamConnection.getRemoteAddress())
 			this.detectClientAddress(downstreamConnection, http, xff);
@@ -128,6 +109,27 @@ public class XForwardedForPlugin {
 			}
 			return;
 		}
+
+		boolean allowedClient = false;
+		if(this.allowedClients != null){
+			for(String s : this.allowedClients){
+				if(s.equals(((InetSocketAddress) downstreamConnection.getRemoteAddress()).getAddress().getHostAddress())){
+					allowedClient = true;
+					break;
+				}
+			}
+		}else{
+			allowedClient = true;
+		}
+		if(!allowedClient){
+			if(this.enforceAllowedClients){
+				logger.warn("Rejecting request with X-Forwarded-For header from disallowed client ", downstreamConnection.getRemoteAddress());
+				http.getEngine().respondError(http, HTTPCommon.STATUS_FORBIDDEN, "Forbidden", "Rejected by XFF settings.");
+			}else
+				logger.warn("Ignoring X-Forwarded-For header in request from disallowed client ", downstreamConnection.getRemoteAddress());
+			return;
+		}
+
 		String[] xffParts = xff.split(",");
 		for(int i = 0; i < xffParts.length; i++)
 			xffParts[i] = xffParts[i].trim();
