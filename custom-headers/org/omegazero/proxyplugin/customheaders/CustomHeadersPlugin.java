@@ -136,8 +136,10 @@ public class CustomHeadersPlugin {
 			ConfigObject reqObj = headerObj.optObject("requiredHeaders");
 			if(reqObj != null){
 				for(String rhkey : reqObj.keySet()){
-					String v = reqObj.getString(rhkey);
-					header.requiredHeaders.put(rhkey.toLowerCase(), v != null ? Pattern.compile(v) : null);
+					Object v = reqObj.get(rhkey);
+					if(!(v == null || v instanceof String))
+						throw new IllegalArgumentException("Values in 'requiredHeaders' must be strings or null");
+					header.requiredHeaders.put(rhkey.toLowerCase(), v != null ? Pattern.compile((String) v) : null);
 				}
 			}
 			headers.add(header);
