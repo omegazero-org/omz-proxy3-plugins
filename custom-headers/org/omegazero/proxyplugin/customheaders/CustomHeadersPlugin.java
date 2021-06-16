@@ -98,12 +98,7 @@ public class CustomHeadersPlugin {
 				Pattern pattern = rh.getValue();
 				if(pattern == null && val == null){
 					continue;
-				}else if((pattern == null && val != null) || (pattern != null && val == null)){
-					if(val != null){
-						rhe = false;
-						break;
-					}
-				}else if(!pattern.matcher(val).matches()){
+				}else if((pattern == null && val != null) || (pattern != null && val == null) || !pattern.matcher(val).matches()){
 					rhe = false;
 					break;
 				}

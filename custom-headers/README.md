@@ -64,4 +64,6 @@ This configuration adds "1.1 omz-proxy" to an existing `Via` header on all HTTP 
 
 This plugin provides an integration with the *VirtualHost* plugin. Each virtual host object may contain an array named `customheaders` which contains objects of the same format as defined above.
 
+Note that the headers configured here are added before headers configured in the plugin configuration object.
+
 
