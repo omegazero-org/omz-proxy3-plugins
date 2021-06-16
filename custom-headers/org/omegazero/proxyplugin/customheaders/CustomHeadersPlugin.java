@@ -71,15 +71,17 @@ public class CustomHeadersPlugin {
 		String hostname = msg.isRequest() ? msg.getAuthority() : msg.getCorrespondingMessage().getAuthority();
 		if(hostname == null)
 			return;
-		for(Host h : this.hosts){
-			if(ProxyUtil.hostMatches(h.expr, hostname)){
-				this.addHeadersFromList(h.headers, msg, up);
-			}
-		}
+
 		if(this.pluginVhost != null){
 			List<Header> vhostHeaders = this.pluginVhost.getHostHeaders(userver);
 			if(vhostHeaders != null)
 				this.addHeadersFromList(vhostHeaders, msg, up);
+		}
+
+		for(Host h : this.hosts){
+			if(ProxyUtil.hostMatches(h.expr, hostname)){
+				this.addHeadersFromList(h.headers, msg, up);
+			}
 		}
 	}
 
