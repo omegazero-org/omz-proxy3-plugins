@@ -104,9 +104,9 @@ public class CachePlugin {
 			String purgeKey = cco.getPurgeKey();
 			if(purgeKey == null){ // disabled
 				if(!cco.isPropagatePurgeRequest())
-					request.getEngine().respondError(request, 405, "Method Not Allowed", "PURGE is disabled");
+					this.purgeReply(request, 405, "disabled");
 			}else if(purgeKey.length() > 0 && !purgeKey.equals(request.getHeader("x-purge-key"))){
-				request.getEngine().respondError(request, 401, "Unauthorized", "Invalid Purge Key");
+				this.purgeReply(request, 401, "unauthorized");
 			}else{
 				String purgeMethod = request.getHeader("x-purge-method");
 				if(purgeMethod == null)
@@ -115,9 +115,9 @@ public class CachePlugin {
 				CacheEntry entry = this.cache.delete(key);
 				if(entry != null){
 					logger.debug("Purged cache entry '", key, "' (age ", entry.age(), ")");
-					request.getEngine().respond(request, 200, "{\"status\":\"ok\"}".getBytes(), "content-type", "application/json");
+					this.purgeReply(request, 200, "ok");
 				}else if(!cco.isPropagatePurgeRequest()){
-					request.getEngine().respond(request, 404, "{\"status\":\"nonexistent\"}".getBytes(), "content-type", "application/json");
+					this.purgeReply(request, 404, "nonexistent");
 				}
 			}
 		}else{
@@ -158,6 +158,12 @@ public class CachePlugin {
 		}
 	}
 
+
+	private void purgeReply(HTTPMessage request, int status, String statusmsg) {
+		request.getEngine().respond(request, status,
+				("{\"status\":\"" + statusmsg + "\"" + (this.cacheName != null ? (",\"server\":\"" + this.cacheServedByPrefix + this.cacheName + "\"") : "") + "}").getBytes(),
+				"content-type", "application/json");
+	}
 
 	private void tryStartCachingResponse(SocketConnection upstreamConnection, HTTPMessage response, UpstreamServer upstreamServer, String key) {
 		long length;
