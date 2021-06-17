@@ -58,6 +58,9 @@ public class CacheConfig {
 		if(request == null)
 			throw new NullPointerException("request is null");
 
+		if(request.getHeader("authorization") != null)
+			return 0;
+
 		String cacheControlReq = request.getHeader("cache-control");
 		if(cacheControlReq != null && cacheControlReq.toLowerCase().contains("no-store"))
 			return 0;

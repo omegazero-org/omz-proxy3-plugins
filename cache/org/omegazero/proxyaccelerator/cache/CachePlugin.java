@@ -160,7 +160,12 @@ public class CachePlugin {
 
 
 	private void tryStartCachingResponse(SocketConnection upstreamConnection, HTTPMessage response, UpstreamServer upstreamServer, String key) {
-		long length = CachePlugin.parseIntSafe(response.getHeader("content-length"), -1);
+		long length;
+		if(response.getCorrespondingMessage().getMethod().equals("HEAD")){
+			length = 0;
+		}else{
+			length = CachePlugin.parseIntSafe(response.getHeader("content-length"), -1);
+		}
 		if(length < 0)
 			return;
 		CacheConfig cc = this.getConfig(upstreamServer);
