@@ -217,7 +217,7 @@ public class XForwardedForPlugin {
 				if(i > 0){
 					sb.append(':');
 				}
-				sb.append(Integer.toHexString((data[i << 1] << 8) | (data[(i << 1) + 1])));
+				sb.append(Integer.toHexString(((data[i << 1] << 8) & 0xff00) | (data[(i << 1) + 1] & 0xff)));
 			}
 			sb.append(']');
 			if(includePort)
