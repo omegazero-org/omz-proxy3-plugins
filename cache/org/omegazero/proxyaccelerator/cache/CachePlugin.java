@@ -104,9 +104,9 @@ public class CachePlugin {
 			String purgeKey = cco.getPurgeKey();
 			if(purgeKey == null){ // disabled
 				if(!cco.isPropagatePurgeRequest())
-					this.purgeReply(request, 405, "disabled");
+					this.purgeReply(request, HTTPCommon.STATUS_METHOD_NOT_ALLOWED, "disabled");
 			}else if(purgeKey.length() > 0 && !purgeKey.equals(request.getHeader("x-purge-key"))){
-				this.purgeReply(request, 401, "unauthorized");
+				this.purgeReply(request, HTTPCommon.STATUS_UNAUTHORIZED, "unauthorized");
 			}else{
 				String purgeMethod = request.getHeader("x-purge-method");
 				if(purgeMethod == null)
@@ -115,9 +115,9 @@ public class CachePlugin {
 				CacheEntry entry = this.cache.delete(key);
 				if(entry != null){
 					logger.debug("Purged cache entry '", key, "' (age ", entry.age(), ")");
-					this.purgeReply(request, 200, "ok");
+					this.purgeReply(request, HTTPCommon.STATUS_OK, "ok");
 				}else if(!cco.isPropagatePurgeRequest()){
-					this.purgeReply(request, 404, "nonexistent");
+					this.purgeReply(request, HTTPCommon.STATUS_NOT_FOUND, "nonexistent");
 				}
 			}
 		}else{
@@ -129,6 +129,35 @@ public class CachePlugin {
 					return;
 				HTTPMessage res = entry.getResponse().clone();
 				entry.incrementHits();
+
+				boolean etagCondition = true;
+				String resourceTag = res.getHeader("etag");
+				String inm = request.getHeader("if-none-match");
+				if(resourceTag != null && inm != null){
+					if(inm.equals("*")){
+						etagCondition = false;
+					}else{
+						if(resourceTag.startsWith("W/"))
+							resourceTag = resourceTag.substring(2);
+						String[] etags = inm.split(",");
+						for(String etag : etags){
+							etag = etag.trim();
+							if(etag.startsWith("W/"))
+								etag = etag.substring(2);
+							if(etag.equals(resourceTag)){
+								etagCondition = false;
+								break;
+							}
+						}
+					}
+				}
+
+				if(!etagCondition){
+					res.setData(new byte[0]);
+					res.setStatus(HTTPCommon.STATUS_NOT_MODIFIED);
+					res.deleteHeader("content-length");
+				}
+
 				this.addHeaders(res, entry, true);
 				request.getEngine().respond(request, res);
 			}
