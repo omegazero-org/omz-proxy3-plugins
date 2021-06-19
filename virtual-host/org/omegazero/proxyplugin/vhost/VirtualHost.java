@@ -25,10 +25,11 @@ public class VirtualHost extends UpstreamServer {
 	private final boolean portWildcard;
 	private final String prependPath;
 	private final boolean redirectInsecure;
+	private final String hostOverride;
 	private final ConfigObject config;
 
 	public VirtualHost(String host, String path, boolean preservePath, boolean portWildcard, String prependPath, InetAddress upstreamAddress, int plainPort, int securePort,
-			boolean redirectInsecure, ConfigObject config) {
+			boolean redirectInsecure, String hostOverride, ConfigObject config) {
 		super(upstreamAddress, plainPort, securePort);
 		this.host = Objects.requireNonNull(host);
 		this.path = Objects.requireNonNull(path);
@@ -36,6 +37,7 @@ public class VirtualHost extends UpstreamServer {
 		this.portWildcard = portWildcard;
 		this.prependPath = prependPath;
 		this.redirectInsecure = redirectInsecure;
+		this.hostOverride = hostOverride;
 		this.config = config;
 	}
 
@@ -62,6 +64,10 @@ public class VirtualHost extends UpstreamServer {
 
 	public boolean isRedirectInsecure() {
 		return this.redirectInsecure;
+	}
+
+	public String getHostOverride() {
+		return hostOverride;
 	}
 
 	public ConfigObject getConfig() {

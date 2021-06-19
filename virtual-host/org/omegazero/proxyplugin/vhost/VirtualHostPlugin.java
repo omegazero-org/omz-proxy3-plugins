@@ -119,7 +119,8 @@ public class VirtualHostPlugin {
 
 		return new VirtualHost(hostname, path, this.getTemplateValue("preservePath", host, template, false, Boolean.class),
 				this.getTemplateValue("portWildcard", host, template, false, Boolean.class), prependPath, addr, plain, tls,
-				this.getTemplateValue("redirectInsecure", host, template, false, Boolean.class), host);
+				this.getTemplateValue("redirectInsecure", host, template, false, Boolean.class), this.getTemplateValue("hostOverride", host, template, null, String.class),
+				host);
 	}
 
 	private <T> T getTemplateValue(String key, ConfigObject host, ConfigObject template, T def, Class<T> type /* need this because of type erasure */) {
@@ -167,6 +168,9 @@ public class VirtualHostPlugin {
 			}
 			if(vhost.getPrependPath() != null){
 				request.setPath(vhost.getPrependPath() + request.getPath());
+			}
+			if(vhost.getHostOverride() != null){
+				request.setAuthority(vhost.getHostOverride());
 			}
 		}else{
 			logger.debug("Request ", request.getRequestId(), " does not have an upstream server of type VirtualHost");

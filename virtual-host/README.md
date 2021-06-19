@@ -22,6 +22,7 @@ The required array named `hosts` is a property in the plugin configuration objec
 | preservePath | boolean | Whether the original request path should be preserved when the `path` of this virtual host is not only `/`. Otherwise, the value of the `path` property will be cut off from the path in the request. | no | false |
 | portWildcard | boolean | Whether a port number in the request authority parameter should be ignored. | no | false |
 | redirectInsecure | boolean | Whether plaintext HTTP requests should be redirected to HTTPS on this virtual host. | no | false |
+| hostOverride | string | If not `null`, the value of the `Host` header (or equivalent) will be replaced by the specified value before a request is forwarded. | no | null |
 | template | string | The name of the template to use. See below. | no | null |
 
 ### Templates
