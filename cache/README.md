@@ -30,6 +30,7 @@ The default configuration for all paths is in the plugin configuration object di
 | maxAgeOverride | number | Override the `max-age` value sent by the origin server. Disabled if `-1`. | no | -1 |
 | maxAgeOverrideCacheableOnly | boolean | Only override the `max-age` value sent by the origin server to the value set in `maxAgeOverride` if the origin server advertised the resource as cacheable. | no | false |
 | ignoreClientRefresh | boolean | Ignore any `Cache-Control` header sent by the client, and always serve resources from the cache if available. | no | false |
+| ignoreClientRefreshIfImmutable | boolean | Applies the effect as if `ignoreClientRefresh` was set to `true` only if the response `Cache-Control` header contains the directives `immutable` or `s-immutable`. `s-immutable` has the same effect as `immutable` on shared caches, but is ignored by private caches. | no | false |
 | maxResourceSize | number | The maximum resource size that will be attempted to be cached. | no | 0x100000 `(1 MiB)` |
 | purgeKey | string | The required header value of the request header `X-Purge-Key` when requesting a resource to be purged using the PURGE method. If `null`, purging will be disabled; if an empty string, the header is not required and any client may purge resources from the cache. | no | null |
 | propagatePurgeRequest | boolean | Whether to forward a PURGE request to the origin server if purging is disabled or the requested resource does not exist. | no | false |

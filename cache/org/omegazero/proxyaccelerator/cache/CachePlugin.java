@@ -204,14 +204,14 @@ public class CachePlugin {
 		if(length < 0)
 			return;
 		CacheConfig cc = this.getConfig(upstreamServer);
-		int maxAge = cc.maxAge(response, length);
-		if(maxAge > 0){
+		CacheEntry.Properties properties = cc.getResourceProperties(response, length);
+		if(properties != null){
 			synchronized(this.pendingCacheEntries){
 				for(PendingCacheEntry p : this.pendingCacheEntries.values()){
 					if(p.key.equals(key)) // there is already a pending entry for this key
 						return;
 				}
-				PendingCacheEntry pce = new PendingCacheEntry(upstreamConnection, response, (int) length, maxAge);
+				PendingCacheEntry pce = new PendingCacheEntry(upstreamConnection, response, (int) length, properties);
 				pce.addData(response.getData());
 				if(!this.tryCompleteCacheEntry(pce, response))
 					this.pendingCacheEntries.put(response, pce);
@@ -227,7 +227,7 @@ public class CachePlugin {
 				this.pendingCacheEntries.remove(response);
 			}else if(pce.dataLen == pce.expectedContentSize){
 				String key = pce.key;
-				logger.debug("Caching resource '", key, "' with maxAge ", pce.maxAge, " (", pce.dataLen, " bytes)");
+				logger.debug("Caching resource '", key, "' with maxAge ", pce.ceProperties.getMaxAge(), " (", pce.dataLen, " bytes)");
 				this.pendingCacheEntries.remove(response);
 				this.cache.store(key, pce.get());
 			}else
@@ -237,7 +237,10 @@ public class CachePlugin {
 	}
 
 	private void addHeaders(HTTPMessage msg, CacheEntry entry, boolean hit) {
-		msg.setHeader("age", hit ? String.valueOf(entry.age()) : "0");
+		if(hit)
+			msg.setHeader("age", String.valueOf(entry.age()));
+		else if(!msg.headerExists("age"))
+			msg.setHeader("age", "0");
 		msg.appendHeader("x-cache", hit ? "HIT" : "MISS", ", ");
 		msg.appendHeader("x-cache-lookup", entry != null ? "HIT" : "MISS", ", ");
 		msg.appendHeader("x-cache-hits", entry != null ? String.valueOf(entry.getHits()) : "0", ", ");
@@ -355,7 +358,7 @@ public class CachePlugin {
 		private final SocketConnection upstreamConnection;
 		private final HTTPMessage response;
 		private final int expectedContentSize;
-		private final int maxAge;
+		private final CacheEntry.Properties ceProperties;
 
 		private final HTTPMessage request;
 		private final String key;
@@ -364,11 +367,11 @@ public class CachePlugin {
 		private List<byte[]> data = new LinkedList<>();
 		private int dataLen = 0;
 
-		public PendingCacheEntry(SocketConnection upstreamConnection, HTTPMessage response, int expectedContentSize, int maxAge) {
+		public PendingCacheEntry(SocketConnection upstreamConnection, HTTPMessage response, int expectedContentSize, CacheEntry.Properties properties) {
 			this.upstreamConnection = upstreamConnection;
 			this.response = response.clone();
 			this.expectedContentSize = expectedContentSize;
-			this.maxAge = maxAge;
+			this.ceProperties = properties;
 
 			this.response.setData(null);
 			HTTPMessage request = this.response.getCorrespondingMessage();
@@ -413,7 +416,7 @@ public class CachePlugin {
 			this.response.setData(data);
 
 			int correctedAgeValue = CachePlugin.parseIntSafe(this.response.getHeader("age"), 0) + this.getResponseDelay();
-			return new CacheEntry(this.request, this.response, time() + (this.maxAge - correctedAgeValue) * 1000, correctedAgeValue);
+			return new CacheEntry(this.request, this.response, time() + (this.ceProperties.getMaxAge() - correctedAgeValue) * 1000L, correctedAgeValue, this.ceProperties);
 		}
 	}
 

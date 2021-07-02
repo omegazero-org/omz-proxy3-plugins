@@ -11,7 +11,6 @@
  */
 package org.omegazero.proxyaccelerator.cache;
 
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 
@@ -23,29 +22,20 @@ public class CacheEntry {
 	private final HTTPMessage response;
 	private final long expiresAt;
 	private final int correctedAgeValue;
+	private final Properties properties;
 
 	private final long creationTime;
 
-	private final Map<String, String> varyValues = new HashMap<>();
-
 	private int hits;
 
-	public CacheEntry(HTTPMessage request, HTTPMessage response, long expiresAt, int correctedAgeValue) {
+	public CacheEntry(HTTPMessage request, HTTPMessage response, long expiresAt, int correctedAgeValue, Properties properties) {
 		this.request = request;
 		this.response = response;
 		this.expiresAt = expiresAt;
 		this.correctedAgeValue = correctedAgeValue;
+		this.properties = properties;
 
 		this.creationTime = CachePlugin.time();
-
-		String vary = response.getHeader("vary");
-		if(vary != null){ // the value "*" is already checked for before this object is created
-			String[] varyHeaders = vary.split(",");
-			for(String v : varyHeaders){
-				v = v.trim().toLowerCase();
-				this.varyValues.put(v, this.request.getHeader(v));
-			}
-		}
 	}
 
 
@@ -56,11 +46,7 @@ public class CacheEntry {
 	 * @return <code>true</code> if the Vary request headers match in both requests or the Vary header in the response was empty or nonexistent
 	 */
 	public boolean isVaryMatching(HTTPMessage request) {
-		for(String k : this.varyValues.keySet()){
-			if(!Objects.equals(request.getHeader(k), this.varyValues.get(k)))
-				return false;
-		}
-		return true;
+		return this.properties.isVaryMatching(request);
 	}
 
 	/**
@@ -98,7 +84,7 @@ public class CacheEntry {
 	 * @return A rough estimation of the amount of memory this cache entry uses in bytes
 	 */
 	public long getSize() {
-		return this.request.getSize() + this.response.getSize() + this.response.getData().length + this.varyValues.size() * 128 + 48;
+		return this.request.getSize() + this.response.getSize() + this.response.getData().length + this.properties.getVaryValuesSize() * 128 + 48;
 	}
 
 	/**
@@ -128,10 +114,60 @@ public class CacheEntry {
 	}
 
 	public int getCorrectedAgeValue() {
-		return correctedAgeValue;
+		return this.correctedAgeValue;
+	}
+
+	public Properties getProperties() {
+		return this.properties;
+	}
+
+	public long getCreationTime() {
+		return this.creationTime;
 	}
 
 	public int getHits() {
-		return hits;
+		return this.hits;
+	}
+
+
+	public static class Properties {
+
+		private final Object config;
+		private final int maxAge;
+		private final Map<String, String> varyValues;
+		private final boolean immutable;
+
+		public Properties(Object config, int maxAge, Map<String, String> varyValues, boolean immutable) {
+			this.config = config;
+			this.maxAge = maxAge;
+			this.varyValues = varyValues;
+			this.immutable = immutable;
+		}
+
+
+		public boolean isVaryMatching(HTTPMessage request) {
+			for(String k : this.varyValues.keySet()){
+				if(!Objects.equals(request.getHeader(k), this.varyValues.get(k)))
+					return false;
+			}
+			return true;
+		}
+
+
+		public Object getConfig() {
+			return this.config;
+		}
+
+		public int getMaxAge() {
+			return this.maxAge;
+		}
+
+		public int getVaryValuesSize() {
+			return this.varyValues.size();
+		}
+
+		public boolean isImmutable() {
+			return this.immutable;
+		}
 	}
 }

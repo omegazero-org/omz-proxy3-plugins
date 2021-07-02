@@ -12,13 +12,16 @@
 package org.omegazero.proxyaccelerator.cache;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Pattern;
 
 import org.omegazero.common.util.PropertyUtil;
 import org.omegazero.proxy.config.ConfigArray;
 import org.omegazero.proxy.config.ConfigObject;
 import org.omegazero.proxy.http.HTTPMessage;
+import org.omegazero.proxyaccelerator.cache.CacheControlUtil.CacheControlParameters;
 
 public class CacheConfig {
 
@@ -53,21 +56,21 @@ public class CacheConfig {
 	 * @param length   The numeric value of the Content-Length header
 	 * @return The time in seconds the given <b>response</b> may be cached. 0 if the response is not cacheable
 	 */
-	public int maxAge(HTTPMessage response, long length) {
+	public CacheEntry.Properties getResourceProperties(HTTPMessage response, long length) {
 		HTTPMessage request = response.getCorrespondingMessage();
 		if(request == null)
 			throw new NullPointerException("request is null");
 
 		if(request.getHeader("authorization") != null)
-			return 0;
+			return null;
 
 		String cacheControlReq = request.getHeader("cache-control");
 		if(cacheControlReq != null && cacheControlReq.toLowerCase().contains("no-store"))
-			return 0;
+			return null;
 
 		String method = request.getMethod();
 		if(!(method.equals("GET") || method.equals("HEAD")))
-			return 0;
+			return null;
 
 		boolean cacheable = false;
 		for(int s : CacheConfig.CACHEABLE_STATUSES){
@@ -77,41 +80,57 @@ public class CacheConfig {
 			}
 		}
 		if(!cacheable)
-			return 0;
+			return null;
 
 		CacheConfigOverride override = this.getOverride(request);
 		if(override == null)
-			return 0; // no path matched (only happens when disabled)
+			return null; // no path matched (only happens when disabled)
 
 		if(length > override.maxResourceSize)
-			return 0;
+			return null;
 
-		if("*".equals(response.getHeader("vary")))
-			return 0;
+		String vary = response.getHeader("vary");
+		if("*".equals(vary))
+			return null;
 
 		String cacheControl = response.getHeader("cache-control");
 
 		int maxAge = 0;
+		boolean immutable = false;
 		if(cacheControl == null)
 			maxAge = override.defaultMaxAge;
 		else{
-			CacheControlParameters params = CacheConfig.parseCacheControl(cacheControl);
+			CacheControlParameters params = CacheControlUtil.parseCacheControl(cacheControl);
 
 			// revalidation is not supported
-			if((params.flags & (CacheControlParameters.MUST_REVALIDATE | CacheControlParameters.MUST_REVALIDATE_PROXY | CacheControlParameters.NOCACHE
+			if((params.getFlags() & (CacheControlParameters.MUST_REVALIDATE | CacheControlParameters.MUST_REVALIDATE_PROXY | CacheControlParameters.NOCACHE
 					| CacheControlParameters.NOSTORE | CacheControlParameters.PRIVATE)) != 0)
 				maxAge = 0;
-			else if(params.maxAgeShared > 0)
-				maxAge = params.maxAgeShared;
-			else if(params.maxAge > 0)
-				maxAge = params.maxAge;
+			else if(params.getMaxAgeShared() > 0)
+				maxAge = params.getMaxAgeShared();
+			else if(params.getMaxAge() > 0)
+				maxAge = params.getMaxAge();
 			else
 				maxAge = override.defaultMaxAge;
 
 			if(override.maxAgeOverride >= 0 && (!override.maxAgeOverrideCacheableOnly || maxAge > 0))
 				maxAge = override.maxAgeOverride;
+
+			immutable = (params.getFlags() & (CacheControlParameters.IMMUTABLE | CacheControlParameters.IMMUTABLE_SHARED)) != 0;
 		}
-		return maxAge;
+		if(maxAge <= 0)
+			return null;
+
+		Map<String, String> varyValues = new HashMap<>();
+		if(vary != null){ // the value "*" is checked for above
+			String[] varyHeaders = vary.split(",");
+			for(String v : varyHeaders){
+				v = v.trim().toLowerCase();
+				varyValues.put(v, request.getHeader(v));
+			}
+		}
+
+		return new CacheEntry.Properties(override, maxAge, varyValues, immutable);
 	}
 
 	/**
@@ -123,25 +142,22 @@ public class CacheConfig {
 	 * @return <code>true</code> if this configuration allows the response data of the cache entry to be used to generate a response for the given request
 	 */
 	public boolean isUsable(HTTPMessage request, CacheEntry cache) {
-		CacheConfigOverride override = this.getOverride(request);
-		if(override == null)
-			return false;
-
-		if(override.ignoreClientRefresh)
+		CacheConfigOverride override = (CacheConfigOverride) cache.getProperties().getConfig();
+		if(override.ignoreClientRefresh || (override.ignoreClientRefreshIfImmutable && cache.getProperties().isImmutable()))
 			return true;
 
 		String cacheControl = request.getHeader("cache-control");
 		if(cacheControl == null)
 			return !cache.isStale();
 
-		CacheControlParameters params = CacheConfig.parseCacheControl(cacheControl);
-		if((params.flags & CacheControlParameters.NOCACHE) != 0) // revalidation is not supported
+		CacheControlParameters params = CacheControlUtil.parseCacheControl(cacheControl);
+		if((params.getFlags() & CacheControlParameters.NOCACHE) != 0) // revalidation is not supported
 			return false;
-		if(params.maxAge >= 0 && cache.age() > params.maxAge)
+		if(params.getMaxAge() >= 0 && cache.age() > params.getMaxAge())
 			return false;
-		if(params.minFresh >= 0 && cache.freshRemaining() < params.minFresh)
+		if(params.getMinFresh() >= 0 && cache.freshRemaining() < params.getMinFresh())
 			return false;
-		if(params.maxStale >= 0 && -cache.freshRemaining() < params.maxStale)
+		if(params.getMaxStale() >= 0 && -cache.freshRemaining() < params.getMaxStale())
 			return true;
 		return !cache.isStale();
 	}
@@ -187,68 +203,15 @@ public class CacheConfig {
 		if(parent != null){
 			return new CacheConfigOverride(Pattern.compile(host), Pattern.compile(path), obj.optInt("defaultMaxAge", parent.defaultMaxAge),
 					obj.optInt("maxAgeOverride", parent.maxAgeOverride), obj.optBoolean("maxAgeOverrideCacheableOnly", parent.maxAgeOverrideCacheableOnly),
-					obj.optBoolean("ignoreClientRefresh", parent.ignoreClientRefresh), obj.optInt("maxResourceSize", parent.maxResourceSize),
-					obj.optString("purgeKey", parent.purgeKey), obj.optBoolean("propagatePurgeRequest", parent.propagatePurgeRequest));
+					obj.optBoolean("ignoreClientRefresh", parent.ignoreClientRefresh), obj.optBoolean("ignoreClientRefreshIfImmutable", parent.ignoreClientRefreshIfImmutable),
+					obj.optInt("maxResourceSize", parent.maxResourceSize), obj.optString("purgeKey", parent.purgeKey),
+					obj.optBoolean("propagatePurgeRequest", parent.propagatePurgeRequest));
 		}else{
 			return new CacheConfigOverride(Pattern.compile(host), Pattern.compile(path), obj.optInt("defaultMaxAge", 0), obj.optInt("maxAgeOverride", -1),
-					obj.optBoolean("maxAgeOverrideCacheableOnly", false), obj.optBoolean("ignoreClientRefresh", false), obj.optInt("maxResourceSize", 0x100000 /* 1MiB */),
+					obj.optBoolean("maxAgeOverrideCacheableOnly", false), obj.optBoolean("ignoreClientRefresh", false),
+					obj.optBoolean("ignoreClientRefreshIfImmutable", false), obj.optInt("maxResourceSize", 0x100000 /* 1MiB */),
 					obj.optString("purgeKey", null)/* default null = disable PURGE */, obj.optBoolean("propagatePurgeRequest", false));
 		}
-	}
-
-	private static CacheControlParameters parseCacheControl(String value) {
-		CacheControlParameters params = new CacheControlParameters();
-		String[] parts = value.toLowerCase().split(",");
-		for(String part : parts){
-			part = part.trim();
-			int flag = getCacheControlFieldFlag(part);
-			if(flag > 0)
-				params.flags |= flag;
-			else if(part.startsWith("max-age"))
-				params.maxAge = getNumberArgumentValue(part, -1);
-			else if(part.startsWith("s-maxage"))
-				params.maxAgeShared = getNumberArgumentValue(part, -1);
-			else if(part.startsWith("max-stale"))
-				params.maxStale = getNumberArgumentValue(part, Integer.MAX_VALUE);
-			else if(part.startsWith("min-fresh"))
-				params.minFresh = getNumberArgumentValue(part, -1);
-		}
-		return params;
-	}
-
-	private static int getCacheControlFieldFlag(String field) {
-		switch(field){
-			case "must-revalidate":
-				return CacheControlParameters.MUST_REVALIDATE;
-			case "proxy-revalidate":
-				return CacheControlParameters.MUST_REVALIDATE_PROXY;
-			case "no-cache":
-				return CacheControlParameters.NOCACHE;
-			case "no-store":
-				return CacheControlParameters.NOSTORE;
-			case "no-transform":
-				return CacheControlParameters.NOTRANSFORM;
-			case "public":
-				return CacheControlParameters.PUBLIC;
-			case "private":
-				return CacheControlParameters.PRIVATE;
-			case "immutable":
-				return CacheControlParameters.IMMUTABLE;
-			default:
-				return 0;
-		}
-	}
-
-	private static int getNumberArgumentValue(String value, int def) {
-		int i = value.indexOf('=');
-		if(i < 0)
-			return def;
-		String numstr = value.substring(i + 1);
-		if(numstr.length() < 1)
-			return def;
-		if(numstr.charAt(0) == '"' && numstr.charAt(numstr.length() - 1) == '"')
-			numstr = numstr.substring(1, numstr.length() - 1);
-		return CachePlugin.parseIntSafe(numstr, def);
 	}
 
 
@@ -261,19 +224,21 @@ public class CacheConfig {
 		private final int maxAgeOverride;
 		private final boolean maxAgeOverrideCacheableOnly;
 		private final boolean ignoreClientRefresh;
+		private final boolean ignoreClientRefreshIfImmutable;
 		private final int maxResourceSize;
 
 		private final String purgeKey;
 		private final boolean propagatePurgeRequest;
 
 		public CacheConfigOverride(Pattern hostMatcher, Pattern pathMatcher, int defaultMaxAge, int maxAgeOverride, boolean maxAgeOverrideCacheableOnly,
-				boolean ignoreClientRefresh, int maxResourceSize, String purgeKey, boolean propagatePurgeRequest) {
+				boolean ignoreClientRefresh, boolean ignoreClientRefreshIfImmutable, int maxResourceSize, String purgeKey, boolean propagatePurgeRequest) {
 			this.hostMatcher = hostMatcher;
 			this.pathMatcher = pathMatcher;
 			this.defaultMaxAge = defaultMaxAge;
 			this.maxAgeOverride = maxAgeOverride;
 			this.maxAgeOverrideCacheableOnly = maxAgeOverrideCacheableOnly;
 			this.ignoreClientRefresh = ignoreClientRefresh;
+			this.ignoreClientRefreshIfImmutable = ignoreClientRefreshIfImmutable;
 			this.maxResourceSize = maxResourceSize;
 			this.purgeKey = purgeKey;
 			this.propagatePurgeRequest = propagatePurgeRequest;
@@ -287,24 +252,6 @@ public class CacheConfig {
 		public boolean isPropagatePurgeRequest() {
 			return propagatePurgeRequest;
 		}
-	}
-
-	private static class CacheControlParameters {
-
-		public static final int MUST_REVALIDATE = 1;
-		public static final int MUST_REVALIDATE_PROXY = 2;
-		public static final int NOCACHE = 4;
-		public static final int NOSTORE = 8;
-		public static final int NOTRANSFORM = 16;
-		public static final int PUBLIC = 32;
-		public static final int PRIVATE = 64;
-		public static final int IMMUTABLE = 128;
-
-		private int flags = 0;
-		private int maxAge = -1;
-		private int maxAgeShared = -1;
-		private int maxStale = -1;
-		private int minFresh = -1;
 	}
 
 
