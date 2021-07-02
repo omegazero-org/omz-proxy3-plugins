@@ -45,6 +45,7 @@ public class XForwardedForPlugin {
 	private boolean includePortNumber;
 	private boolean enableDownstream;
 	private boolean enableUpstream;
+	private boolean forwardHeader;
 
 
 	public synchronized void configurationReload(ConfigObject config) {
@@ -88,6 +89,7 @@ public class XForwardedForPlugin {
 		this.includePortNumber = config.optBoolean("includePortNumber", false);
 		this.enableDownstream = config.optBoolean("enableDownstream", true);
 		this.enableUpstream = config.optBoolean("enableUpstream", true);
+		this.forwardHeader = config.optBoolean("forwardHeader", true);
 	}
 
 
@@ -96,6 +98,10 @@ public class XForwardedForPlugin {
 		String xff = http.getHeader("x-forwarded-for");
 		if(this.enableDownstream && downstreamConnection.getApparentRemoteAddress() == downstreamConnection.getRemoteAddress())
 			this.detectClientAddress(downstreamConnection, http, xff);
+		if(!this.forwardHeader && xff != null){
+			http.deleteHeader("x-forwarded-for");
+			xff = null;
+		}
 		if(this.enableUpstream)
 			this.forwardClientAddress(downstreamConnection, http, xff);
 	}

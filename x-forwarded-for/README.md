@@ -15,7 +15,8 @@ Configuration ID: `xforwardedfor`
 | enforceExpectedParts | boolean | Whether to reject requests that do not match the settings set in the `expectedParts` property, instead of just ignoring the XFF header. | no | false |
 | requireHeader | boolean | Whether to reject requests that do not have an XFF header. | no | false |
 | includePortNumber | boolean | Whether to include the port number when adding the XFF header to forwarded requests. | no | false |
-| enableDownstream | boolean | Enable parsing of XFF headers in requests | no | true |
-| enableUpstream | boolean | Enable adding XFF headers or header values in forwarded requests | no | true |
+| enableDownstream | boolean | Enable parsing of XFF headers in requests. Note that any existing XFF header values will still be forwarded if this is `false`. | no | true |
+| enableUpstream | boolean | Enable adding XFF headers or header values in forwarded requests. Note that any existing XFF header values will still be forwarded if this is `false`. | no | true |
+| forwardHeader | boolean | Enable forwarding an existing XFF header value in a request. | no | true |
 
 
