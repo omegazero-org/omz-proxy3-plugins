@@ -115,3 +115,11 @@ public static boolean org.omegazero.proxyaccelerator.cache.CachePlugin.registerC
 ```
 Returns `true` if the new implementation was successfully registered, `false` if an implementation with the given name already exists.
 
+### Registering a VaryComparator
+
+VaryComparators are used to check if a response which contains a `Vary` HTTP header is allowed to be served for a request. For each header declared in the `Vary` header, the header value in the request that caused the cached response and the header value in the new request are compared using a VaryComparator. If none was registered for a header, the default is used, which only matches if both values are exactly equal.
+```java
+public static boolean org.omegazero.proxyaccelerator.cache.CachePlugin.registerVaryComparator(String, VaryComparator);
+```
+Returns `true` if a comparator was previously registered for the given header, `false` otherwise.
+

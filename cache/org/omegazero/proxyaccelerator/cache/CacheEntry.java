@@ -12,7 +12,6 @@
 package org.omegazero.proxyaccelerator.cache;
 
 import java.util.Map;
-import java.util.Objects;
 
 import org.omegazero.proxy.http.HTTPMessage;
 
@@ -147,7 +146,7 @@ public class CacheEntry {
 
 		public boolean isVaryMatching(HTTPMessage request) {
 			for(String k : this.varyValues.keySet()){
-				if(!Objects.equals(request.getHeader(k), this.varyValues.get(k)))
+				if(!CachePlugin.getVaryComparator(k).semanticallyEquivalent(request.getHeader(k), this.varyValues.get(k)))
 					return false;
 			}
 			return true;

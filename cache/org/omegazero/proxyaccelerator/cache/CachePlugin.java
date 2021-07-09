@@ -16,6 +16,7 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
 import org.omegazero.common.event.Tasks;
@@ -40,7 +41,8 @@ public class CachePlugin {
 
 	private static final Logger logger = LoggerUtil.createLogger();
 
-	private static Map<String, Supplier<ResourceCache>> cacheTypes = new HashMap<>();
+	private static Map<String, Supplier<ResourceCache>> cacheTypes = new ConcurrentHashMap<>();
+	private static Map<String, VaryComparator> varyComparators = new ConcurrentHashMap<>();
 
 
 	private final Map<HTTPMessage, PendingCacheEntry> pendingCacheEntries = new HashMap<>();
@@ -319,6 +321,26 @@ public class CachePlugin {
 			return false;
 		CachePlugin.cacheTypes.put(name, supplier);
 		return true;
+	}
+
+	/**
+	 * Registers a new {@link VaryComparator} which is used to check if the values of two headers are semantically equivalent, and a response containing a <b>Vary</b> HTTP
+	 * header may be served for a request when all declared headers are equal or the <code>VaryComparator</code>s return <code>true</code>.
+	 * 
+	 * @param header     The name of the HTTP header whose values this comparator compares
+	 * @param comparator The comparator
+	 * @return <code>true</code> if a comparator was previously registered for the given header
+	 */
+	public static boolean registerVaryComparator(String header, VaryComparator comparator) {
+		return CachePlugin.varyComparators.put(header, comparator) != null;
+	}
+
+	static VaryComparator getVaryComparator(String header) {
+		VaryComparator c = CachePlugin.varyComparators.get(header);
+		if(c != null)
+			return c;
+		else
+			return VaryComparator.EQUALS_COMPARATOR;
 	}
 
 	/**
