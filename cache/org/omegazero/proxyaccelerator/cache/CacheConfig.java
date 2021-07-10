@@ -53,10 +53,9 @@ public class CacheConfig {
 	 * Determines the maximum time in seconds the given <b>response</b> may be cached based on HTTP headers and this configuration.
 	 * 
 	 * @param response
-	 * @param length   The numeric value of the Content-Length header
 	 * @return The time in seconds the given <b>response</b> may be cached. 0 if the response is not cacheable
 	 */
-	public CacheEntry.Properties getResourceProperties(HTTPMessage response, long length) {
+	public CacheEntry.Properties getResourceProperties(HTTPMessage response) {
 		HTTPMessage request = response.getCorrespondingMessage();
 		if(request == null)
 			throw new NullPointerException("request is null");
@@ -85,9 +84,6 @@ public class CacheConfig {
 		CacheConfigOverride override = this.getOverride(request);
 		if(override == null)
 			return null; // no path matched (only happens when disabled)
-
-		if(length > override.maxResourceSize)
-			return null;
 
 		String vary = response.getHeader("vary");
 		if("*".equals(vary))
@@ -130,7 +126,7 @@ public class CacheConfig {
 			}
 		}
 
-		return new CacheEntry.Properties(override, maxAge, varyValues, immutable);
+		return new CacheEntry.Properties(override, override.maxResourceSize, maxAge, varyValues, immutable);
 	}
 
 	/**

@@ -154,14 +154,17 @@ public class CachePlugin {
 					}
 				}
 
+				byte[] data;
 				if(!etagCondition){
-					res.setData(new byte[0]);
 					res.setStatus(HTTPCommon.STATUS_NOT_MODIFIED);
 					res.deleteHeader("content-length");
+					data = new byte[0];
+				}else{
+					data = entry.getResponseData();
 				}
 
 				this.addHeaders(res, entry, true);
-				request.getEngine().respond(request, res);
+				request.getEngine().respond(request, new HTTPMessageData(res, data));
 			}
 		}
 	}
@@ -183,8 +186,23 @@ public class CachePlugin {
 		synchronized(this.pendingCacheEntries){
 			PendingCacheEntry pce = this.pendingCacheEntries.get(response);
 			if(pce != null){
-				pce.addData(responsedata.getData());
-				this.tryCompleteCacheEntry(pce, response);
+				if(!pce.addData(responsedata.getData())){
+					logger.debug("Removing pending cache entry because it is too large: ", pce.dataLen, " > ", pce.ceProperties.getMaxDataSize());
+					this.pendingCacheEntries.remove(response);
+				}
+			}
+		}
+	}
+
+	@SubscribeEvent(priority = Priority.LOWEST)
+	public void onHTTPResponseEnded(SocketConnection downstreamConnection, SocketConnection upstreamConnection, HTTPMessage response, UpstreamServer upstreamServer) {
+		synchronized(this.pendingCacheEntries){
+			PendingCacheEntry pce = this.pendingCacheEntries.get(response);
+			if(pce != null){
+				String key = pce.key;
+				logger.debug("Caching resource '", key, "' with maxAge ", pce.ceProperties.getMaxAge(), " (", pce.dataLen, " bytes)");
+				this.pendingCacheEntries.remove(response);
+				this.cache.store(key, pce.get());
 			}
 		}
 	}
@@ -197,44 +215,17 @@ public class CachePlugin {
 	}
 
 	private void tryStartCachingResponse(SocketConnection upstreamConnection, HTTPMessage response, UpstreamServer upstreamServer, String key) {
-		long length;
-		if(response.getCorrespondingMessage().getMethod().equals("HEAD")){
-			length = 0;
-		}else{
-			length = CachePlugin.parseIntSafe(response.getHeader("content-length"), -1);
-		}
-		if(length < 0)
-			return;
 		CacheConfig cc = this.getConfig(upstreamServer);
-		CacheEntry.Properties properties = cc.getResourceProperties(response, length);
+		CacheEntry.Properties properties = cc.getResourceProperties(response);
 		if(properties != null){
 			synchronized(this.pendingCacheEntries){
 				for(PendingCacheEntry p : this.pendingCacheEntries.values()){
 					if(p.key.equals(key)) // there is already a pending entry for this key
 						return;
 				}
-				PendingCacheEntry pce = new PendingCacheEntry(upstreamConnection, response, (int) length, properties);
-				pce.addData(response.getData());
-				if(!this.tryCompleteCacheEntry(pce, response))
-					this.pendingCacheEntries.put(response, pce);
+				PendingCacheEntry pce = new PendingCacheEntry(upstreamConnection, response, properties);
+				this.pendingCacheEntries.put(response, pce);
 			}
-		}
-	}
-
-	private boolean tryCompleteCacheEntry(PendingCacheEntry pce, HTTPMessage response) {
-		synchronized(this.pendingCacheEntries){
-			if(pce.dataLen > pce.expectedContentSize){
-				logger.warn("Received more data than expected for URL '", pce.request.requestURI(), "', discarding cache entry: ", pce.dataLen, " > ",
-						pce.expectedContentSize);
-				this.pendingCacheEntries.remove(response);
-			}else if(pce.dataLen == pce.expectedContentSize){
-				String key = pce.key;
-				logger.debug("Caching resource '", key, "' with maxAge ", pce.ceProperties.getMaxAge(), " (", pce.dataLen, " bytes)");
-				this.pendingCacheEntries.remove(response);
-				this.cache.store(key, pce.get());
-			}else
-				return false;
-			return true;
 		}
 	}
 
@@ -379,7 +370,6 @@ public class CachePlugin {
 
 		private final SocketConnection upstreamConnection;
 		private final HTTPMessage response;
-		private final int expectedContentSize;
 		private final CacheEntry.Properties ceProperties;
 
 		private final HTTPMessage request;
@@ -389,20 +379,17 @@ public class CachePlugin {
 		private List<byte[]> data = new LinkedList<>();
 		private int dataLen = 0;
 
-		public PendingCacheEntry(SocketConnection upstreamConnection, HTTPMessage response, int expectedContentSize, CacheEntry.Properties properties) {
+		public PendingCacheEntry(SocketConnection upstreamConnection, HTTPMessage response, CacheEntry.Properties properties) {
 			this.upstreamConnection = upstreamConnection;
-			this.response = response.clone();
-			this.expectedContentSize = expectedContentSize;
+			this.response = response;
 			this.ceProperties = properties;
 
-			this.response.setData(null);
 			HTTPMessage request = this.response.getCorrespondingMessage();
 			if(request == null)
 				throw new NullPointerException("request is null");
 			request = request.clone(); // may still be used so clone before editing
 			request.setAuthority(request.getOrigAuthority()); // reset any changes
 			request.setPath(request.getOrigPath());
-			request.setData(null); // data is unused
 			this.request = request;
 			this.key = CachePlugin.getCacheKey(this.request);
 
@@ -420,9 +407,10 @@ public class CachePlugin {
 		}
 
 
-		public synchronized void addData(byte[] d) {
+		public synchronized boolean addData(byte[] d) {
 			this.data.add(d);
 			this.dataLen += d.length;
+			return this.dataLen <= this.ceProperties.getMaxDataSize();
 		}
 
 		public synchronized CacheEntry get() {
@@ -435,10 +423,10 @@ public class CachePlugin {
 				i += d.length;
 			}
 			this.data = null;
-			this.response.setData(data);
 
 			int correctedAgeValue = CachePlugin.parseIntSafe(this.response.getHeader("age"), 0) + this.getResponseDelay();
-			return new CacheEntry(this.request, this.response, time() + (this.ceProperties.getMaxAge() - correctedAgeValue) * 1000L, correctedAgeValue, this.ceProperties);
+			return new CacheEntry(this.request, this.response, data, time() + (this.ceProperties.getMaxAge() - correctedAgeValue) * 1000L, correctedAgeValue,
+					this.ceProperties);
 		}
 	}
 

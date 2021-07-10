@@ -19,6 +19,7 @@ public class CacheEntry {
 
 	private final HTTPMessage request;
 	private final HTTPMessage response;
+	private final byte[] responseData;
 	private final long expiresAt;
 	private final int correctedAgeValue;
 	private final Properties properties;
@@ -27,9 +28,10 @@ public class CacheEntry {
 
 	private int hits;
 
-	public CacheEntry(HTTPMessage request, HTTPMessage response, long expiresAt, int correctedAgeValue, Properties properties) {
+	public CacheEntry(HTTPMessage request, HTTPMessage response, byte[] responseData, long expiresAt, int correctedAgeValue, Properties properties) {
 		this.request = request;
 		this.response = response;
+		this.responseData = responseData;
 		this.expiresAt = expiresAt;
 		this.correctedAgeValue = correctedAgeValue;
 		this.properties = properties;
@@ -83,7 +85,7 @@ public class CacheEntry {
 	 * @return A rough estimation of the amount of memory this cache entry uses in bytes
 	 */
 	public long getSize() {
-		return this.request.getSize() + this.response.getSize() + this.response.getData().length + this.properties.getVaryValuesSize() * 128 + 48;
+		return this.request.getSize() + this.response.getSize() + this.responseData.length + this.properties.getVaryValuesSize() * 128 + 48;
 	}
 
 	/**
@@ -106,6 +108,10 @@ public class CacheEntry {
 
 	public HTTPMessage getResponse() {
 		return this.response;
+	}
+
+	public byte[] getResponseData() {
+		return this.responseData;
 	}
 
 	public long getExpiresAt() {
@@ -132,12 +138,14 @@ public class CacheEntry {
 	public static class Properties {
 
 		private final Object config;
+		private final int maxDataSize;
 		private final int maxAge;
 		private final Map<String, String> varyValues;
 		private final boolean immutable;
 
-		public Properties(Object config, int maxAge, Map<String, String> varyValues, boolean immutable) {
+		public Properties(Object config, int maxDataSize, int maxAge, Map<String, String> varyValues, boolean immutable) {
 			this.config = config;
+			this.maxDataSize = maxDataSize;
 			this.maxAge = maxAge;
 			this.varyValues = varyValues;
 			this.immutable = immutable;
@@ -155,6 +163,10 @@ public class CacheEntry {
 
 		public Object getConfig() {
 			return this.config;
+		}
+
+		public int getMaxDataSize() {
+			return this.maxDataSize;
 		}
 
 		public int getMaxAge() {
