@@ -11,11 +11,7 @@
  */
 package org.omegazero.proxyplugin.mirror;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.net.UnknownHostException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 import org.omegazero.common.eventbus.EventBusSubscriber;
@@ -29,7 +25,6 @@ import org.omegazero.proxy.config.ConfigObject;
 import org.omegazero.proxy.http.HTTPMessage;
 import org.omegazero.proxy.http.HTTPMessageData;
 import org.omegazero.proxy.net.UpstreamServer;
-import org.omegazero.proxy.util.ArrayUtil;
 import org.omegazero.proxy.util.ProxyUtil;
 import org.omegazero.proxyplugin.mirror.transformer.AuthorityTransformer;
 import org.omegazero.proxyplugin.mirror.transformer.PathTransformer;
@@ -39,15 +34,11 @@ public class MirrorPlugin {
 
 	private static final Logger logger = LoggerUtil.createLogger();
 
-	private static final byte[] EOL = new byte[] { 0xd, 0xa };
-	private static final byte[] EMPTY_CHUNK = new byte[] { '0', 0xd, 0xa, 0xd, 0xa };
 
-
-	private int maxChunkSize;
 	private List<TransformerEntry> transformers = new ArrayList<>();
 
-	public synchronized void configurationReload(ConfigObject config) throws UnknownHostException {
-		this.maxChunkSize = config.optInt("maxChunkSize", 0x1000000);
+	public synchronized void configurationReload(ConfigObject config) {
+		this.transformers.clear();
 		ConfigArray arr = config.optArray("transformers");
 		if(arr == null)
 			return;
@@ -83,139 +74,36 @@ public class MirrorPlugin {
 
 
 	@SubscribeEvent(priority = Priority.HIGH)
-	public void onHTTPResponse(SocketConnection downstreamConnection, SocketConnection upstreamConnection, HTTPMessage response, UpstreamServer upstreamServer)
-			throws IOException {
+	public void onHTTPResponse(SocketConnection downstreamConnection, SocketConnection upstreamConnection, HTTPMessage response, UpstreamServer upstreamServer) {
 		String reqHostname = response.getCorrespondingMessage().getOrigAuthority();
 		if(reqHostname == null)
 			return;
 		Transformer transformer = null;
-		for(TransformerEntry te : this.transformers){
-			if(ProxyUtil.hostMatches(te.hostname, reqHostname)){
-				transformer = te.transformer;
-				break;
+		synchronized(this){
+			for(TransformerEntry te : this.transformers){
+				if(ProxyUtil.hostMatches(te.hostname, reqHostname)){
+					transformer = te.transformer;
+					break;
+				}
 			}
 		}
 		if(transformer == null)
 			return;
 		response.setAttachment("mirror_transformer", transformer);
-		if(response.headerExists("content-length")){
-			int length;
-			try{
-				length = Integer.parseInt(response.getHeader("content-length"));
-			}catch(NumberFormatException e){
-				throw new IOException("Invalid Content-Length value", e);
-			}
-			response.setAttachment("mirror_totalsizeRemaining", length);
-			response.setAttachment("mirror_chunkRemaining", -1);
-			response.deleteHeader("content-length");
-			response.setHeader("transfer-encoding", "chunked");
-		}
-		response.setData(this.processDataChunk(response, response.getData()));
+		response.setChunkedTransfer(true);
 	}
 
 	@SubscribeEvent(priority = Priority.HIGH)
-	public void onHTTPResponseData(SocketConnection downstreamConnection, SocketConnection upstreamConnection, HTTPMessageData responsedata, UpstreamServer upstreamServer)
-			throws IOException {
+	public void onHTTPResponseData(SocketConnection downstreamConnection, SocketConnection upstreamConnection, HTTPMessageData responsedata, UpstreamServer upstreamServer) {
 		responsedata.setData(this.processDataChunk(responsedata.getHttpMessage(), responsedata.getData()));
 	}
 
 
-	private byte[] processDataChunk(HTTPMessage response, byte[] data) throws IOException {
+	private byte[] processDataChunk(HTTPMessage response, byte[] data) {
 		Transformer transformer = (Transformer) response.getAttachment("mirror_transformer");
 		if(transformer == null)
 			return data;
-		Object totalRemainingAtt = response.getAttachment("mirror_totalsizeRemaining");
-		if(totalRemainingAtt == null){ // chunked
-			return this.transformChunkedData(transformer, response, data);
-		}else{
-			int totalRemaining = (int) totalRemainingAtt;
-			totalRemaining -= data.length;
-			response.setAttachment("mirror_totalsizeRemaining", totalRemaining);
-			byte[] nd = this.transform(transformer, data, response);
-			if(nd.length > 0){
-				return toChunk(nd, totalRemaining <= 0);
-			}else
-				return new byte[0];
-		}
-	}
-
-	private byte[] transformChunkedData(Transformer transformer, HTTPMessage response, byte[] data) throws IOException {
-		Object remainingAtt = response.getAttachment("mirror_chunkRemaining");
-		int remaining = remainingAtt != null ? (int) remainingAtt : 0;
-		if(remaining < 0)
-			throw new IllegalStateException("chunkRemaining is negative");
-		ByteArrayOutputStream baos = new ByteArrayOutputStream(data.length);
-		int index = 0;
-		while(index < data.length){
-			if(remaining == 0){
-				int chunkHeaderEnd = ArrayUtil.byteArrayIndexOf(data, EOL, index);
-				if(chunkHeaderEnd < 0)
-					throw new IOException("No chunk size in chunked response");
-				int chunkLen;
-				try{
-					int lenEnd = chunkHeaderEnd;
-					for(int j = index; j < lenEnd; j++){
-						if(data[j] == ';'){
-							lenEnd = j;
-							break;
-						}
-					}
-					chunkLen = Integer.parseInt(new String(data, index, lenEnd - index), 16);
-				}catch(NumberFormatException e){
-					throw new IOException("Invalid chunk size", e);
-				}
-				if(chunkLen > this.maxChunkSize)
-					throw new IOException("Chunk size is larger than configured maximum: " + chunkLen + " > " + this.maxChunkSize);
-				chunkHeaderEnd += EOL.length;
-				int datasize = data.length - chunkHeaderEnd;
-				if(datasize >= chunkLen + EOL.length){
-					byte[] chunkdata = Arrays.copyOfRange(data, chunkHeaderEnd, chunkHeaderEnd + chunkLen);
-					this.transformAndWriteChunk(baos, transformer, chunkdata, response);
-					index = chunkHeaderEnd + chunkLen + EOL.length;
-				}else{
-					int write = Math.min(datasize, chunkLen);
-					byte[] newChunk = new byte[chunkLen];
-					System.arraycopy(data, chunkHeaderEnd, newChunk, 0, write);
-					response.setAttachment("mirror_chunk", newChunk);
-					response.setAttachment("mirror_chunkPointer", write);
-					response.setAttachment("mirror_chunkRemaining", chunkLen + EOL.length - datasize);
-					index = data.length;
-				}
-			}else{
-				if(index > 0)
-					throw new IllegalStateException("End of incomplete chunk can only be at start of packet");
-				byte[] chunk = (byte[]) response.getAttachment("mirror_chunk");
-				int pointer = (int) response.getAttachment("mirror_chunkPointer");
-				if(remaining <= data.length){
-					int write = remaining - EOL.length;
-					if(write > 0)
-						System.arraycopy(data, 0, chunk, pointer, write);
-					this.transformAndWriteChunk(baos, transformer, chunk, response);
-					response.setAttachment("mirror_chunkRemaining", 0);
-					index += remaining;
-					remaining = 0;
-				}else{
-					int write = Math.min(chunk.length - pointer, data.length);
-					System.arraycopy(data, 0, chunk, pointer, write);
-					response.setAttachment("mirror_chunkPointer", pointer + write);
-					response.setAttachment("mirror_chunkRemaining", remaining - data.length);
-					index = data.length;
-				}
-			}
-		}
-		return baos.toByteArray();
-	}
-
-	private void transformAndWriteChunk(ByteArrayOutputStream baos, Transformer transformer, byte[] data, HTTPMessage response) {
-		if(data.length > 0){
-			byte[] ncd = this.transform(transformer, data, response);
-			if(ncd.length > 0){
-				ncd = toChunk(ncd);
-				baos.write(ncd, 0, ncd.length);
-			}
-		}else{
-			baos.write(EMPTY_CHUNK, 0, EMPTY_CHUNK.length);
-		}
+		return this.transform(transformer, data, response);
 	}
 
 	private byte[] transform(Transformer transformer, byte[] data, HTTPMessage msg) {
@@ -229,35 +117,10 @@ public class MirrorPlugin {
 		byte[] n = transformer.transform(msg.getCorrespondingMessage(), ctype, data);
 		if(n != null){
 			long time = System.nanoTime() - start;
-			logger.debug("Transformed: ", data.length, " -> ", n.length, " bytes in ", time / 1000000, ".", time % 1000000, "ms");
+			logger.debug("Transformed: ", data.length, " -> ", n.length, " bytes in ", time / 1000000, ".", String.format("%06d", time % 1000000), "ms");
 			return n;
 		}else
 			return data;
-	}
-
-
-	private static byte[] toChunk(byte[] data) {
-		return toChunk(data, false);
-	}
-
-	private static byte[] toChunk(byte[] data, boolean includeEnd) {
-		byte[] hexlen = Integer.toString(data.length, 16).getBytes();
-		int chunkFrameSize = data.length + hexlen.length + EOL.length * 2;
-		if(includeEnd)
-			chunkFrameSize += EMPTY_CHUNK.length;
-		byte[] chunk = new byte[chunkFrameSize];
-		int i = 0;
-		System.arraycopy(hexlen, 0, chunk, i, hexlen.length);
-		i += hexlen.length;
-		System.arraycopy(EOL, 0, chunk, i, EOL.length);
-		i += EOL.length;
-		System.arraycopy(data, 0, chunk, i, data.length);
-		i += data.length;
-		System.arraycopy(EOL, 0, chunk, i, EOL.length);
-		i += EOL.length;
-		if(includeEnd)
-			System.arraycopy(EMPTY_CHUNK, 0, chunk, i, EMPTY_CHUNK.length);
-		return chunk;
 	}
 
 
