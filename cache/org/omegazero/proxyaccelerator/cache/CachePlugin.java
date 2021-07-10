@@ -381,7 +381,7 @@ public class CachePlugin {
 
 		public PendingCacheEntry(SocketConnection upstreamConnection, HTTPMessage response, CacheEntry.Properties properties) {
 			this.upstreamConnection = upstreamConnection;
-			this.response = response;
+			this.response = response.clone();
 			this.ceProperties = properties;
 
 			HTTPMessage request = this.response.getCorrespondingMessage();
