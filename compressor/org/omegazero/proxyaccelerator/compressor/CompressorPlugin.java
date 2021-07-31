@@ -109,8 +109,11 @@ public class CompressorPlugin {
 				break;
 			}
 		}
-		if(selectedEncoding == null)
+		if(selectedEncoding == null){
+			if(availableEncoding == null)
+				return;
 			selectedEncoding = availableEncoding;
+		}
 
 		Supplier<Compressor> compressorSupplier = CompressorPlugin.compressors.get(selectedEncoding);
 		if(compressorSupplier == null){
