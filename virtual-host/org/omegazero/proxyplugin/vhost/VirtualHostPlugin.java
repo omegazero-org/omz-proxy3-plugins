@@ -135,7 +135,7 @@ public class VirtualHostPlugin {
 
 
 	@SubscribeEvent
-	public UpstreamServer selectUpstreamServer(String hostname, String path) throws UnknownHostException {
+	public UpstreamServer selectUpstreamServer(String hostname, String path) {
 		VirtualHost host = this.selectHost(hostname, path);
 		if(host != null){
 			logger.trace("Selected virtual host [", host, "] for ", hostname, path);
@@ -150,7 +150,7 @@ public class VirtualHostPlugin {
 		if(userver instanceof VirtualHost){
 			VirtualHost vhost = (VirtualHost) userver;
 			if(request.getScheme().equals("http") && vhost.isRedirectInsecure()){
-				logger.info("Redirecting HTTP to HTTPS");
+				logger.debug("Redirecting HTTP to HTTPS");
 				request.getEngine().respond(request, 307, new byte[0], "Location", "https://" + request.getOrigAuthority() + request.getOrigPath());
 			}
 		}
