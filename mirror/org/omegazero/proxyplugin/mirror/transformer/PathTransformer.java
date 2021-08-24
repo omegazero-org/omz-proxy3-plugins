@@ -13,12 +13,13 @@ package org.omegazero.proxyplugin.mirror.transformer;
 
 import org.omegazero.proxy.http.HTTPMessage;
 import org.omegazero.proxyplugin.mirror.Transformer;
+import org.omegazero.proxyplugin.mirror.TransformerReplacements;
 
 public class PathTransformer extends Transformer {
 
 
-	public PathTransformer(String original, String replacement, boolean toHttp) {
-		super(original, replacement, toHttp);
+	public PathTransformer(TransformerReplacements replacements, boolean toHttp) {
+		super(replacements, toHttp);
 	}
 
 
@@ -32,14 +33,15 @@ public class PathTransformer extends Transformer {
 				if(authEnd < 0)
 					authEnd = str.length();
 				String authority = str.substring(authStart, authEnd);
-				if(!authority.endsWith(super.original))
+				TransformerReplacements.Replacement replacement = super.replacements.getDomainReplacement(authority);
+				if(replacement == null)
 					return part;
-				String sub = authority.substring(0, authority.length() - super.original.length());
+				String sub = authority.substring(0, authority.length() - replacement.getFrom().length());
 				String start = str.substring(0, authStart);
 				if(super.toHttp && start.startsWith("https:"))
 					start = "http://";
 				String path = str.substring(authEnd);
-				return (start + super.replacement + (sub.length() > 0 ? ("/!" + sub) : "") + (path.length() > 0 ? path : "/")).getBytes();
+				return (start + replacement.getTo() + (sub.length() > 0 ? ("/!" + sub) : "") + (path.length() > 0 ? path : "/")).getBytes();
 			}else if(str.startsWith("/")){
 				String path = request.getOrigPath();
 				if(!path.startsWith("/!"))

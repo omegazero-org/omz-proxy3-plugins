@@ -13,12 +13,13 @@ package org.omegazero.proxyplugin.mirror.transformer;
 
 import org.omegazero.proxy.http.HTTPMessage;
 import org.omegazero.proxyplugin.mirror.Transformer;
+import org.omegazero.proxyplugin.mirror.TransformerReplacements;
 
 public class AuthorityTransformer extends Transformer {
 
 
-	public AuthorityTransformer(String original, String replacement, boolean toHttp) {
-		super(original, replacement, toHttp);
+	public AuthorityTransformer(TransformerReplacements replacements, boolean toHttp) {
+		super(replacements, toHttp);
 	}
 
 
@@ -33,9 +34,10 @@ public class AuthorityTransformer extends Transformer {
 			if(authEnd < 0)
 				authEnd = str.length();
 			String authority = str.substring(authStart, authEnd);
-			if(!authority.endsWith(super.original))
+			TransformerReplacements.Replacement replacement = super.replacements.getDomainReplacement(authority);
+			if(replacement == null)
 				return part;
-			authority = authority.substring(0, authority.length() - super.original.length()) + super.replacement;
+			authority = authority.substring(0, authority.length() - replacement.getFrom().length()) + replacement.getTo();
 			String start = str.substring(0, authStart);
 			if(super.toHttp && start.startsWith("https:"))
 				start = "http://";

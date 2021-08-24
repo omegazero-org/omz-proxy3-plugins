@@ -47,14 +47,13 @@ public class MirrorPlugin {
 				continue;
 			ConfigObject tObj = (ConfigObject) obj;
 			String type = tObj.getString("type");
-			String original = tObj.getString("original");
-			String replacement = tObj.getString("replacement");
+			TransformerReplacements replacements = TransformerReplacements.from(tObj.getObject("replacements"));
 			boolean toHttp = tObj.optBoolean("toHttp", false);
 			Transformer t;
 			if(type.equals("authority")){
-				t = new AuthorityTransformer(original, replacement, toHttp);
+				t = new AuthorityTransformer(replacements, toHttp);
 			}else if(type.equals("path")){
-				t = new PathTransformer(original, replacement, toHttp);
+				t = new PathTransformer(replacements, toHttp);
 			}else
 				throw new IllegalArgumentException("Invalid type: " + type);
 			Object so = tObj.get("hostname");
@@ -117,7 +116,8 @@ public class MirrorPlugin {
 		byte[] n = transformer.transform(msg.getCorrespondingMessage(), ctype, data);
 		if(n != null){
 			long time = System.nanoTime() - start;
-			logger.debug("Transformed: ", data.length, " -> ", n.length, " bytes in ", time / 1000000, ".", String.format("%06d", time % 1000000), "ms");
+			if(logger.debug())
+				logger.debug("Transformed: ", data.length, " -> ", n.length, " bytes in ", time / 1000000, ".", String.format("%06d", time % 1000000), "ms");
 			return n;
 		}else
 			return data;

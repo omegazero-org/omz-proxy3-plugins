@@ -25,13 +25,11 @@ public abstract class Transformer {
 
 	protected static final Pattern ABSOLUTE_URL_PATTERN = Pattern.compile("https?://[a-zA-Z0-9\\-\\.]+(/.*)?");
 
-	protected final String original;
-	protected final String replacement;
+	protected final TransformerReplacements replacements;
 	protected final boolean toHttp;
 
-	public Transformer(String original, String replacement, boolean toHttp) {
-		this.original = original;
-		this.replacement = replacement;
+	public Transformer(TransformerReplacements replacements, boolean toHttp) {
+		this.replacements = replacements;
 		this.toHttp = toHttp;
 	}
 

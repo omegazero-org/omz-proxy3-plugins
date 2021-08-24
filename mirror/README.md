@@ -22,15 +22,14 @@ To actually edit the response body, the `transformers` array must contain one or
 | --- | --- | --- | --- | --- |
 | type | string | The type of transformation to apply. See below. | yes | `-` |
 | hostname | string / array(string) | The wildcard resource hostname(s) for which this transformation should be applied to responses. | yes | `-` |
-| original | string | The original hostname in links that should be replaced. | yes | `-` |
-| replacement | string | The hostname where edited links should point to instead, replacing `original`. | yes | `-` |
+| replacements | object | Object of string key-value pairs. The hostname in the key is replaced by the hostname in the value for links that are edited. | yes | `-` |
 | toHttp | boolean | Whether links that originally had the `https` URL scheme should be edited to have the `http` URL scheme instead. | no | false |
 
 ### Transformer Types
 
 Below are possible values for the `type` option in objects in the `transformers` array.
 
-Examples below have `original` set to "example.com" and `replacement` set to "example-mirror.com".
+Examples below have a configuration to replace hostname "example.com" with "example-mirror.com" (`replacements` is `{"example.com": "example-mirror.com"}`).
 
 #### authority
 
@@ -42,7 +41,7 @@ Examples:
 
 #### path
 
-This transformer edits the *authority* part of absolute URLs in links, always setting it to `replacement`. If the original URL authority had any subdomain, it is instead prepended to the path, prefixed by "!". Furthermore, absolute paths (e.g. "/style.css") will also be prepended with the original subdomain of the document, if required.
+This transformer edits the *authority* part of absolute URLs in links, always setting it to the replacement. If the original URL authority had any subdomain, it is instead prepended to the path, prefixed by "!". Furthermore, absolute paths (e.g. "/style.css") will also be prepended with the original subdomain of the document, if required.
 
 This may be useful to use instead of `authority` if only a single domain name can be used as the mirror site, but the original site contains resources on multiple subdomains.
 
@@ -65,9 +64,10 @@ Transformer Readers scan the response body of a resource and extract any strings
 	"transformers": [
 		{
 			"type": "path",
-			"hostname": "hiddenservicedomainname.hs",
-			"original": "example.com",
-			"replacement": "hiddenservicedomainname.hs",
+			"hostname": "*.hs",
+			"replacements": {
+				"example.com": "hiddenservicedomainname.hs"
+			},
 			"toHttp": true
 		}
 	]
