@@ -16,6 +16,7 @@ import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.omegazero.common.config.ConfigArray;
 import org.omegazero.common.config.ConfigObject;
@@ -35,9 +36,11 @@ public class VirtualHostPlugin {
 	private static final Logger logger = LoggerUtil.createLogger();
 
 
+	private Map<String, ConfigObject> templates = new HashMap<>();
 	private List<VirtualHost> hosts = new ArrayList<>();
 
 	public synchronized void configurationReload(ConfigObject config) throws UnknownHostException {
+		this.templates.clear();
 		this.hosts.clear();
 		ConfigArray hostsArray = config.optArray("hosts");
 		if(hostsArray == null){
@@ -45,23 +48,13 @@ public class VirtualHostPlugin {
 			return;
 		}
 
-		HashMap<String, ConfigObject> templates = new HashMap<>();
 		ConfigObject templatesObjects = config.optObject("templates");
-		if(templatesObjects != null){
-			for(String name : templatesObjects.keySet()){
-				templates.put(name, templatesObjects.getObject(name));
-			}
-		}
 
 		for(Object obj : hostsArray){
 			if(!(obj instanceof ConfigObject))
 				throw new IllegalArgumentException("Elements in 'hosts' must be objects");
 			ConfigObject host = (ConfigObject) obj;
-
-			ConfigObject template = null;
-			String templateName = host.optString("template", null);
-			if(templateName != null)
-				template = templates.get(templateName);
+			host = this.mergeVHostWithTemplateValues(templatesObjects, host);
 
 			String path = host.optString("path", "/");
 			if(path.length() < 1 || path.charAt(0) != '/')
@@ -72,12 +65,12 @@ public class VirtualHostPlugin {
 				for(Object o : (ConfigArray) hostnameObj){
 					if(!(o instanceof String))
 						throw new IllegalArgumentException("Elements in 'hostname' array must be strings");
-					VirtualHost vh = this.getVHost((String) o, path, host, template);
+					VirtualHost vh = this.getVHost((String) o, path, host);
 					this.hosts.add(vh);
 					logger.debug("Added aggregated virtual host ", vh);
 				}
 			}else if(hostnameObj instanceof String){
-				VirtualHost vh = this.getVHost((String) hostnameObj, path, host, template);
+				VirtualHost vh = this.getVHost((String) hostnameObj, path, host);
 				this.hosts.add(vh);
 				logger.debug("Added virtual host ", vh);
 			}else
@@ -89,7 +82,7 @@ public class VirtualHostPlugin {
 		});
 	}
 
-	private VirtualHost getVHost(String hostnamePath, String dpath, ConfigObject host, ConfigObject template) throws UnknownHostException {
+	private VirtualHost getVHost(String hostnamePath, String dpath, ConfigObject host) throws UnknownHostException {
 		String hostname;
 		String path;
 		int pathI = hostnamePath.indexOf('/');
@@ -100,16 +93,13 @@ public class VirtualHostPlugin {
 			hostname = hostnamePath;
 			path = dpath;
 		}
-		String addrr = this.getTemplateValue("address", host, template, null, String.class);
-		if(addrr == null)
-			throw new IllegalArgumentException("'address' must be a string");
-		InetAddress addr = InetAddress.getByName(addrr);
-		int plain = this.getTemplateValue("portPlain", host, template, 80, Integer.class);
-		int tls = this.getTemplateValue("portTLS", host, template, 443, Integer.class);
+		InetAddress addr = InetAddress.getByName(host.getString("address"));
+		int plain = host.optInt("portPlain", 80);
+		int tls = host.optInt("portTLS", 443);
 		if(plain <= 0 && tls <= 0)
 			throw new IllegalArgumentException("Upstream server " + addr + " requires either portPlain or portTLS");
 
-		String prependPath = this.getTemplateValue("prependPath", host, template, null, String.class);
+		String prependPath = host.optString("prependPath", null);
 		if(prependPath != null){
 			if(prependPath.length() < 1)
 				prependPath = null;
@@ -117,20 +107,60 @@ public class VirtualHostPlugin {
 				throw new IllegalArgumentException("prependPath must start with a slash ('/')");
 		}
 
-		return new VirtualHost(hostname, path, this.getTemplateValue("preservePath", host, template, false, Boolean.class),
-				this.getTemplateValue("portWildcard", host, template, false, Boolean.class), prependPath, addr, plain, tls,
-				this.getTemplateValue("redirectInsecure", host, template, false, Boolean.class), this.getTemplateValue("hostOverride", host, template, null, String.class),
-				host);
+		return new VirtualHost(hostname, path, host.optBoolean("preservePath", false), host.optBoolean("portWildcard", false), prependPath, addr, plain, tls,
+				host.optBoolean("redirectInsecure", false), host.optString("hostOverride", null), host);
 	}
 
-	private <T> T getTemplateValue(String key, ConfigObject host, ConfigObject template, T def, Class<T> type /* need this because of type erasure */) {
-		Object v = host.get(key);
-		if(v == null && template != null)
-			v = template.get(key);
-		if(v == null || !type.isAssignableFrom(v.getClass()))
-			return def;
+	private ConfigObject mergeVHostWithTemplateValues(ConfigObject templatesObj, ConfigObject host) {
+		String tn = host.optString("template", null);
+		if(tn != null)
+			return this.mergeTemplateValues(host, this.loadTemplate(templatesObj, tn));
 		else
-			return type.cast(v);
+			return host;
+	}
+
+	private ConfigObject mergeTemplateValues(ConfigObject orig, ConfigObject templateObj) {
+		Map<String, Object> data = orig.copyData();
+		if(templateObj != null){
+			for(Map.Entry<String, Object> e : templateObj.entrySet()){
+				Object nValue = e.getValue();
+				Object existingValue = data.get(e.getKey());
+				if(existingValue != null){
+					if(existingValue instanceof ConfigArray && e.getValue() instanceof ConfigArray){
+						List<Object> mergedList = ((ConfigArray) existingValue).copyData();
+						mergedList.addAll(((ConfigArray) e.getValue()).copyData());
+						nValue = new ConfigArray(mergedList);
+					}else
+						continue;
+				}
+				data.put(e.getKey(), nValue);
+			}
+		}
+		data.remove("template");
+		return new ConfigObject(data);
+	}
+
+	private ConfigObject loadTemplate(ConfigObject templatesObj, String name) {
+		return this.loadTemplate(templatesObj, name, new java.util.LinkedList<>());
+	}
+
+	private ConfigObject loadTemplate(ConfigObject templatesObj, String name, java.util.Collection<String> wtn) {
+		if(this.templates.containsKey(name))
+			return this.templates.get(name);
+		else{
+			ConfigObject template = templatesObj != null ? templatesObj.optObject(name) : null;
+			if(template == null)
+				throw new IllegalArgumentException("Template does not exist: " + name);
+			String subtemplateName = template.optString("template", null);
+			if(subtemplateName != null){
+				if(wtn.contains(subtemplateName))
+					throw new IllegalArgumentException("Template '" + name + "' has template property pointing to itself");
+				wtn.add(subtemplateName);
+				template = this.mergeTemplateValues(template, this.loadTemplate(templatesObj, subtemplateName, wtn));
+			}
+			this.templates.put(name, template);
+			return template;
+		}
 	}
 
 

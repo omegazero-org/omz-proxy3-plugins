@@ -29,7 +29,9 @@ The required array named `hosts` is a property in the plugin configuration objec
 
 Each virtual host may specify a `template` if multiple virtual hosts have similar properties.
 
-Templates are defined in the `templates` object in the plugin configuration object. This object contains named objects, where the name of the object is the name of the template that may be used as a value of a `template` property. A template object accepts the same properties as a virtual host object, except `hostname`, `path`, and `template`.
+Templates are defined in the `templates` object in the plugin configuration object. This object contains named objects, where the name of the object is the name of the template that may be used as a value of a `template` property.
+
+If either a virtual host or template object contains a `template` property, it has the same effect as if all properties of the specified template are copied into that object. Properties that are already set are not copied (meaning: going from the virtual host object to the last template, properties set in the former objects will always override properties set in the latter objects), except arrays, which are merged.
 
 #### Applying templates
 
@@ -43,6 +45,10 @@ A different way to image this is that the virtual host object copies all propert
 {
 	"templates": {
 		"default": {
+			"redirectInsecure": true
+		},
+		"userver": {
+			"template": "default",
 			"address": "localhost",
 			"portPlain": 8080,
 			"portTLS": -1
@@ -51,16 +57,17 @@ A different way to image this is that the virtual host object copies all propert
 	"hosts": [
 		{
 			"hostname": "example.com",
-			"template": "default"
+			"template": "userver"
 		},
 		{
 			"hostname": "api.example.com",
-			"template": "default",
+			"template": "userver",
 			"prependPath": "/api"
 		},
 		{
 			"hostname": "example.com",
 			"path": "/wiki/",
+			"template": "default",
 			"address": "192.168.0.10",
 			"portPlain": 80,
 			"portTLS": -1
