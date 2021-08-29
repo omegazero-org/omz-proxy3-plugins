@@ -17,14 +17,14 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
+import org.omegazero.common.config.ConfigArray;
+import org.omegazero.common.config.ConfigObject;
 import org.omegazero.common.eventbus.EventBusSubscriber;
 import org.omegazero.common.eventbus.SubscribeEvent;
 import org.omegazero.common.eventbus.SubscribeEvent.Priority;
 import org.omegazero.common.logging.Logger;
 import org.omegazero.common.logging.LoggerUtil;
 import org.omegazero.net.socket.SocketConnection;
-import org.omegazero.proxy.config.ConfigArray;
-import org.omegazero.proxy.config.ConfigObject;
 import org.omegazero.proxy.http.HTTPMessage;
 import org.omegazero.proxy.net.UpstreamServer;
 import org.omegazero.proxy.util.ProxyUtil;

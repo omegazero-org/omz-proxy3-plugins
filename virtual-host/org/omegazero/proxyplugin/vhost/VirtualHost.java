@@ -14,7 +14,7 @@ package org.omegazero.proxyplugin.vhost;
 import java.net.InetAddress;
 import java.util.Objects;
 
-import org.omegazero.proxy.config.ConfigObject;
+import org.omegazero.common.config.ConfigObject;
 import org.omegazero.proxy.net.UpstreamServer;
 
 public class VirtualHost extends UpstreamServer {

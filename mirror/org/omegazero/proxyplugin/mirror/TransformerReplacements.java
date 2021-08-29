@@ -13,7 +13,7 @@ package org.omegazero.proxyplugin.mirror;
 
 import java.util.Set;
 
-import org.omegazero.proxy.config.ConfigObject;
+import org.omegazero.common.config.ConfigObject;
 
 public class TransformerReplacements {
 

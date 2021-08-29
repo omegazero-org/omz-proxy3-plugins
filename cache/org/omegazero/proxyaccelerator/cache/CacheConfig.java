@@ -17,9 +17,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 
+import org.omegazero.common.config.ConfigArray;
+import org.omegazero.common.config.ConfigObject;
 import org.omegazero.common.util.PropertyUtil;
-import org.omegazero.proxy.config.ConfigArray;
-import org.omegazero.proxy.config.ConfigObject;
 import org.omegazero.proxy.http.HTTPMessage;
 import org.omegazero.proxyaccelerator.cache.CacheControlUtil.CacheControlParameters;
 

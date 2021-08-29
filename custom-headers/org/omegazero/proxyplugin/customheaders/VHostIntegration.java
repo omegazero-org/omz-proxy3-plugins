@@ -4,7 +4,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.omegazero.proxy.config.ConfigArray;
+import org.omegazero.common.config.ConfigArray;
 import org.omegazero.proxy.net.UpstreamServer;
 import org.omegazero.proxyplugin.customheaders.CustomHeadersPlugin.Header;
 import org.omegazero.proxyplugin.vhost.VirtualHost;

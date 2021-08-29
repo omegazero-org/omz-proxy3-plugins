@@ -14,7 +14,7 @@ package org.omegazero.proxyaccelerator.cache.integration;
 import java.util.HashMap;
 import java.util.Map;
 
-import org.omegazero.proxy.config.ConfigObject;
+import org.omegazero.common.config.ConfigObject;
 import org.omegazero.proxy.net.UpstreamServer;
 import org.omegazero.proxyaccelerator.cache.CacheConfig;
 import org.omegazero.proxyplugin.vhost.VirtualHost;
