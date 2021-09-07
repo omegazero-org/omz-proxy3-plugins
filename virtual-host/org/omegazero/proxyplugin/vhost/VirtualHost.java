@@ -29,8 +29,8 @@ public class VirtualHost extends UpstreamServer {
 	private final ConfigObject config;
 
 	public VirtualHost(String host, String path, boolean preservePath, boolean portWildcard, String prependPath, InetAddress upstreamAddress, int plainPort, int securePort,
-			boolean redirectInsecure, String hostOverride, ConfigObject config) {
-		super(upstreamAddress, plainPort, securePort);
+			java.util.Set<String> protos, boolean redirectInsecure, String hostOverride, ConfigObject config) {
+		super(upstreamAddress, plainPort, securePort, protos);
 		this.host = Objects.requireNonNull(host);
 		this.path = Objects.requireNonNull(path);
 		this.preservePath = preservePath;

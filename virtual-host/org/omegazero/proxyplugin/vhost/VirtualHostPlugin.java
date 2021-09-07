@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.omegazero.common.config.ConfigArray;
 import org.omegazero.common.config.ConfigObject;
@@ -99,6 +100,18 @@ public class VirtualHostPlugin {
 		if(plain <= 0 && tls <= 0)
 			throw new IllegalArgumentException("Upstream server " + addr + " requires either portPlain or portTLS");
 
+		Set<String> protos = null;
+		ConfigArray protosArr = host.optArray("protocols");
+		if(protosArr != null){
+			protos = new java.util.HashSet<>();
+			for(Object o : protosArr){
+				if(o instanceof String)
+					protos.add((String) o);
+				else
+					throw new IllegalArgumentException("Values in 'protocols' must be strings");
+			}
+		}
+
 		String prependPath = host.optString("prependPath", null);
 		if(prependPath != null){
 			if(prependPath.length() < 1)
@@ -107,7 +120,7 @@ public class VirtualHostPlugin {
 				throw new IllegalArgumentException("prependPath must start with a slash ('/')");
 		}
 
-		return new VirtualHost(hostname, path, host.optBoolean("preservePath", false), host.optBoolean("portWildcard", false), prependPath, addr, plain, tls,
+		return new VirtualHost(hostname, path, host.optBoolean("preservePath", false), host.optBoolean("portWildcard", false), prependPath, addr, plain, tls, protos,
 				host.optBoolean("redirectInsecure", false), host.optString("hostOverride", null), host);
 	}
 

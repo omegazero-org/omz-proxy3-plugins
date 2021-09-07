@@ -18,6 +18,7 @@ The required array named `hosts` is a property in the plugin configuration objec
 | address | string | The address of the origin server. | yes | `-` |
 | portPlain | number | The port where the origin server is listening for plaintext HTTP requests. May be negative, in which case all requests will be forwarded to the HTTPS port below. | no | 80 |
 | portTLS | number | The port where the origin server is listening for HTTPS requests. May be negative, in which case all requests will be forwarded to the plaintext HTTP port above. At least one of both ports must be given. | no | 443 |
+| protocols | array(string) | A list of protocol names that the upstream server supports. Similar to `upstreamServerProtocols` in the omz-proxy3 base configuration. | no | ["http/1.1"] |
 | prependPath | string | An optional path string to prepend to the requested path before forwarding the request. | no | null |
 | preservePath | boolean | Whether the original request path should be preserved when the `path` of this virtual host is not only `/`. Otherwise, the value of the `path` property will be cut off from the path in the request. | no | false |
 | portWildcard | boolean | Whether a port number in the request authority parameter should be ignored. | no | false |
