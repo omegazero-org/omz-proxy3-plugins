@@ -99,7 +99,7 @@ public class CachePlugin {
 		if(request.getAuthority() == null)
 			return;
 		if(request.getMethod().equals("PURGE")){
-			CacheConfig cc = this.getConfigForRequest(request);
+			CacheConfig cc = this.getConfig(userver);
 			CacheConfig.CacheConfigOverride cco = cc.getOverride(request);
 			if(cco == null)
 				return;
@@ -126,10 +126,11 @@ public class CachePlugin {
 			String key = CachePlugin.getCacheKey(request);
 			CacheEntry entry = this.cache.fetch(key);
 			if(entry != null && entry.isUsableFor(request)){
-				CacheConfig cc = this.getConfigForRequest(request);
+				CacheConfig cc = this.getConfig(userver);
 				if(!cc.isUsable(request, entry))
 					return;
 				HTTPMessage res = entry.getResponse().clone();
+				res.setVersion(request.getVersion());
 				entry.incrementHits();
 
 				boolean etagCondition = true;
@@ -239,14 +240,6 @@ public class CachePlugin {
 		msg.appendHeader("x-cache-hits", entry != null ? String.valueOf(entry.getHits()) : "0", ", ");
 		if(this.cacheName != null)
 			msg.appendHeader("x-served-by", this.cacheServedByPrefix + this.cacheName, ", ");
-	}
-
-	private CacheConfig getConfigForRequest(HTTPMessage request) {
-		UpstreamServer userver = Proxy.getInstance().getUpstreamServer(request.getAuthority(), request.getOrigPath());
-		if(userver == null)
-			return this.cacheConfig;
-		CacheConfig cc = this.getConfig(userver);
-		return cc;
 	}
 
 	private CacheConfig getConfig(UpstreamServer userver) {

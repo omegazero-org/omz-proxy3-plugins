@@ -51,16 +51,16 @@ public class CacheEntry {
 	}
 
 	/**
-	 * Checks if this <code>CacheEntry</code> is suitable to be used as a response to the given <b>request</b>. It is considered suitable if this entry is not stale, the
-	 * request lines of the given request and the request of this entry are equal and all Vary headers match.
+	 * Checks if this <code>CacheEntry</code> is suitable to be used as a response to the given <b>request</b>. It is considered suitable if this entry is not stale and all
+	 * Vary headers match.<br>
+	 * <b>This method does not check if the HTTP request parameters (method, path, etc) are equal.</b>
 	 * 
 	 * @param request
 	 * @return <code>true</code> if this entry is suitable to be used as a response to the given <b>request</b>
-	 * @see HTTPMessage#equalStartLine(HTTPMessage)
 	 * @see #isVaryMatching(HTTPMessage)
 	 */
 	public boolean isUsableFor(HTTPMessage request) {
-		return !this.isStale() && this.request.equalStartLine(request) && this.isVaryMatching(request);
+		return !this.isStale() && this.isVaryMatching(request);
 	}
 
 
