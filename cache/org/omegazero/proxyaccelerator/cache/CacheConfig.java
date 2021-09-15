@@ -50,17 +50,17 @@ public class CacheConfig {
 	}
 
 	/**
-	 * Determines the maximum time in seconds the given <b>response</b> may be cached based on HTTP headers and this configuration.
+	 * Determines several cache properties of the given <b>response</b> based on HTTP headers and this configuration.
 	 * 
 	 * @param response
-	 * @return The time in seconds the given <b>response</b> may be cached. 0 if the response is not cacheable
+	 * @return Cache properties of the response, or <code>null</code> if the response is not cacheable
 	 */
 	public CacheEntry.Properties getResourceProperties(HTTPMessage response) {
 		HTTPMessage request = response.getCorrespondingMessage();
 		if(request == null)
 			throw new NullPointerException("request is null");
 
-		if(request.getHeader("authorization") != null)
+		if(request.headerExists("authorization"))
 			return null;
 
 		String cacheControlReq = request.getHeader("cache-control");
@@ -71,16 +71,6 @@ public class CacheConfig {
 		if(!(method.equals("GET") || method.equals("HEAD")))
 			return null;
 
-		boolean cacheable = false;
-		for(int s : CacheConfig.CACHEABLE_STATUSES){
-			if(s == response.getStatus()){
-				cacheable = true;
-				break;
-			}
-		}
-		if(!cacheable)
-			return null;
-
 		CacheConfigOverride override = this.getOverride(request);
 		if(override == null)
 			return null; // no path matched (only happens when disabled)
@@ -89,13 +79,19 @@ public class CacheConfig {
 		if("*".equals(vary))
 			return null;
 
+		boolean statusCacheable = false;
+		for(int s : CacheConfig.CACHEABLE_STATUSES){
+			if(s == response.getStatus()){
+				statusCacheable = true;
+				break;
+			}
+		}
+
 		String cacheControl = response.getHeader("cache-control");
 
 		int maxAge = 0;
 		boolean immutable = false;
-		if(cacheControl == null)
-			maxAge = override.defaultMaxAge;
-		else{
+		if(cacheControl != null){
 			CacheControlParameters params = CacheControlUtil.parseCacheControl(cacheControl);
 
 			// revalidation is not supported
@@ -106,14 +102,15 @@ public class CacheConfig {
 				maxAge = params.getMaxAgeShared();
 			else if(params.getMaxAge() > 0)
 				maxAge = params.getMaxAge();
-			else
+			else if(statusCacheable || (params.getFlags() & CacheControlParameters.PUBLIC) != 0)
 				maxAge = override.defaultMaxAge;
 
 			if(override.maxAgeOverride >= 0 && (!override.maxAgeOverrideCacheableOnly || maxAge > 0))
 				maxAge = override.maxAgeOverride;
 
 			immutable = (params.getFlags() & (CacheControlParameters.IMMUTABLE | CacheControlParameters.IMMUTABLE_SHARED)) != 0;
-		}
+		}else if(statusCacheable)
+			maxAge = override.defaultMaxAge;
 		if(maxAge <= 0)
 			return null;
 
