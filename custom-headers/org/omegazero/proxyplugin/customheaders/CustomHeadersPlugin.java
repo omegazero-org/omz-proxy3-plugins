@@ -105,6 +105,20 @@ public class CustomHeadersPlugin {
 			}
 			if(!rhe)
 				continue;
+
+			if(!up && header.requiredStatus != null){
+				int status = msg.getStatus();
+				boolean rstatus = false;
+				for(int s : header.requiredStatus){
+					if(s == status){
+						rstatus = true;
+						break;
+					}
+				}
+				if(rstatus != header.requiredStatusWhitelist)
+					continue;
+			}
+
 			if((header.mode & Header.MODE_KEEP) != 0){
 				if(prevVal == null){
 					msg.setHeader(header.key, header.value);
@@ -133,6 +147,22 @@ public class CustomHeadersPlugin {
 			Header header = new Header(headerObj.getString("key").toLowerCase(), value.length() > 0 ? value : null, direction, mode);
 			if((header.mode & (Header.MODE_APPEND | Header.MODE_PREPEND)) != 0)
 				header.separator = headerObj.getString("separator");
+
+			Object reqStatus = headerObj.get("requiredStatus");
+			if(reqStatus instanceof ConfigArray){
+				header.requiredStatus = new int[((ConfigArray) reqStatus).size()];
+				int i = 0;
+				for(Object s : (ConfigArray) reqStatus){
+					if(!(s instanceof Integer))
+						throw new IllegalArgumentException("Values in 'requiredStatus' must be numbers");
+					header.requiredStatus[i++] = (Integer) s;
+				}
+			}else if(reqStatus instanceof Integer){
+				header.requiredStatus = new int[] { (Integer) reqStatus };
+			}else if(reqStatus != null)
+				throw new IllegalArgumentException("'requiredStatus' must be a number or an array of numbers");
+			header.requiredStatusWhitelist = headerObj.optBoolean("requiredStatusWhitelist", true);
+
 			ConfigObject reqObj = headerObj.optObject("requiredHeaders");
 			if(reqObj != null){
 				for(String rhkey : reqObj.keySet()){
@@ -210,6 +240,8 @@ public class CustomHeadersPlugin {
 		private final int mode;
 
 		private String separator;
+		private int[] requiredStatus = null;
+		private boolean requiredStatusWhitelist = false;
 		private Map<String, Pattern> requiredHeaders = new HashMap<>();
 
 		public Header(String key, String value, int direction, int mode) {
