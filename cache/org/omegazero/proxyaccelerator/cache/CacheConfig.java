@@ -25,7 +25,7 @@ import org.omegazero.proxyaccelerator.cache.CacheControlUtil.CacheControlParamet
 
 public class CacheConfig {
 
-	private static final int[] CACHEABLE_STATUSES_DEFAULT = new int[] { 200, 204, 301, 308, 410 };
+	private static final int[] CACHEABLE_STATUSES_DEFAULT = new int[] { 200, 203, 204, 300, 301, 308, 404, 405, 410, 414, 501 };
 	private static final int[] CACHEABLE_STATUSES;
 
 
@@ -56,6 +56,12 @@ public class CacheConfig {
 	 * @return Cache properties of the response, or <code>null</code> if the response is not cacheable
 	 */
 	public CacheEntry.Properties getResourceProperties(HTTPMessage response) {
+		int rstatus = response.getStatus();
+		// <200 must not be cached; 206 (Range response) is not supported; 304 standalone should not be cached, but it still contains the cache-control header
+		// for other response codes >=400, the upstream server should decide in a cache-control header whether it makes sense to cache the response
+		if(rstatus < 200 || rstatus == 206 || rstatus == 304)
+			return null;
+
 		HTTPMessage request = response.getCorrespondingMessage();
 		if(request == null)
 			throw new NullPointerException("request is null");
@@ -81,7 +87,7 @@ public class CacheConfig {
 
 		boolean statusCacheable = false;
 		for(int s : CacheConfig.CACHEABLE_STATUSES){
-			if(s == response.getStatus()){
+			if(s == rstatus){
 				statusCacheable = true;
 				break;
 			}
