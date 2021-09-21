@@ -21,6 +21,7 @@ import java.util.function.Supplier;
 
 import org.omegazero.common.config.ConfigObject;
 import org.omegazero.common.event.Tasks;
+import org.omegazero.common.eventbus.Event;
 import org.omegazero.common.eventbus.EventBusSubscriber;
 import org.omegazero.common.eventbus.SubscribeEvent;
 import org.omegazero.common.eventbus.SubscribeEvent.Priority;
@@ -43,6 +44,10 @@ public class CachePlugin {
 
 	private static Map<String, Supplier<ResourceCache>> cacheTypes = new ConcurrentHashMap<>();
 	private static Map<String, VaryComparator> varyComparators = new ConcurrentHashMap<>();
+
+	public static final Event EVENT_CACHE_HIT = new Event("cache_hit", new Class<?>[] { HTTPMessage.class, HTTPMessageData.class });
+	public static final Event EVENT_CACHE_MISS = new Event("cache_miss", new Class<?>[] { HTTPMessage.class });
+	public static final Event EVENT_CACHE_PURGE = new Event("cache_purge", new Class<?>[] { HTTPMessage.class });
 
 
 	private final Map<HTTPMessage, PendingCacheEntry> pendingCacheEntries = new HashMap<>();
@@ -99,6 +104,7 @@ public class CachePlugin {
 		if(request.getAuthority() == null)
 			return;
 		if(request.getMethod().equals("PURGE")){
+			Proxy.getInstance().dispatchEvent(EVENT_CACHE_PURGE, request);
 			CacheConfig cc = this.getConfig(userver);
 			CacheConfig.CacheConfigOverride cco = cc.getOverride(request);
 			if(cco == null)
@@ -127,8 +133,10 @@ public class CachePlugin {
 			CacheEntry entry = this.cache.fetch(key);
 			if(entry != null && entry.isUsableFor(request)){
 				CacheConfig cc = this.getConfig(userver);
-				if(!cc.isUsable(request, entry))
+				if(!cc.isUsable(request, entry)){
+					Proxy.getInstance().dispatchEvent(EVENT_CACHE_MISS, request);
 					return;
+				}
 				HTTPMessage res = entry.getResponse().clone();
 				res.setVersion(request.getVersion());
 				entry.incrementHits();
@@ -165,7 +173,11 @@ public class CachePlugin {
 				}
 
 				this.addHeaders(res, entry, true);
-				request.getEngine().respond(request, new HTTPMessageData(res, data));
+				HTTPMessageData resdata = new HTTPMessageData(res, data);
+				Proxy.getInstance().dispatchEvent(EVENT_CACHE_HIT, request, resdata);
+				request.getEngine().respond(request, resdata);
+			}else{
+				Proxy.getInstance().dispatchEvent(EVENT_CACHE_MISS, request);
 			}
 		}
 	}
