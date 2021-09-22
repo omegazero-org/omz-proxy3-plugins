@@ -120,8 +120,8 @@ public class VirtualHostPlugin {
 				throw new IllegalArgumentException("prependPath must start with a slash ('/')");
 		}
 
-		return new VirtualHost(hostname, path, host.optBoolean("preservePath", false), host.optBoolean("portWildcard", false), prependPath, addr, plain, tls, protos,
-				host.optBoolean("redirectInsecure", false), host.optString("hostOverride", null), host);
+		return new VirtualHost(hostname, path, host.optBoolean("preservePath", false), host.optBoolean("portWildcard", false), prependPath, addr,
+				host.optInt("addressTTL", -1), plain, tls, protos, host.optBoolean("redirectInsecure", false), host.optString("hostOverride", null), host);
 	}
 
 	private ConfigObject mergeVHostWithTemplateValues(ConfigObject templatesObj, ConfigObject host) {
