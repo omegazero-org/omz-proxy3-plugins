@@ -381,6 +381,8 @@ public class CachePlugin {
 		private final String key;
 		private final long created = time();
 
+		private final int correctedAgeValue;
+
 		private List<byte[]> data = new LinkedList<>();
 		private int dataLen = 0;
 
@@ -398,6 +400,9 @@ public class CachePlugin {
 			this.request = request;
 			this.key = CachePlugin.getCacheKey(this.request);
 
+			this.correctedAgeValue = CachePlugin.parseIntSafe(response.getHeader("age"), 0)
+					+ (int) ((response.getCreatedTime() - response.getCorrespondingMessage().getCreatedTime()) / 1000);
+
 			if(!this.response.headerExists("date"))
 				this.response.setHeader("date", HTTPCommon.dateString());
 		}
@@ -405,10 +410,6 @@ public class CachePlugin {
 
 		public int getPendingTime() {
 			return (int) ((time() - this.created) / 1000);
-		}
-
-		public int getResponseDelay() {
-			return (int) ((this.request.getCreatedTime() - this.response.getCreatedTime()) / 1000);
 		}
 
 
@@ -429,8 +430,7 @@ public class CachePlugin {
 			}
 			this.data = null;
 
-			int correctedAgeValue = CachePlugin.parseIntSafe(this.response.getHeader("age"), 0) + this.getResponseDelay();
-			return new CacheEntry(this.request, this.response, data, time() + (this.ceProperties.getMaxAge() - correctedAgeValue) * 1000L, correctedAgeValue,
+			return new CacheEntry(this.request, this.response, data, time() + (this.ceProperties.getMaxAge() - this.correctedAgeValue) * 1000L, this.correctedAgeValue,
 					this.ceProperties);
 		}
 	}
