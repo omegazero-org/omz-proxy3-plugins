@@ -48,6 +48,7 @@ public class CachePlugin {
 	public static final Event EVENT_CACHE_HIT = new Event("cache_hit", new Class<?>[] { HTTPMessage.class, HTTPMessageData.class });
 	public static final Event EVENT_CACHE_MISS = new Event("cache_miss", new Class<?>[] { HTTPMessage.class });
 	public static final Event EVENT_CACHE_PURGE = new Event("cache_purge", new Class<?>[] { HTTPMessage.class });
+	public static final Event EVENT_CACHE_STORE = new Event("cache_store", new Class<?>[] { CacheEntry.class });
 
 
 	private final Map<HTTPMessage, PendingCacheEntry> pendingCacheEntries = new HashMap<>();
@@ -215,7 +216,9 @@ public class CachePlugin {
 				String key = pce.key;
 				logger.debug("Caching resource '", key, "' with maxAge ", pce.ceProperties.getMaxAge(), " (", pce.dataLen, " bytes)");
 				this.pendingCacheEntries.remove(response);
-				this.cache.store(key, pce.get());
+				CacheEntry entry = pce.get();
+				Proxy.getInstance().dispatchEvent(EVENT_CACHE_STORE, entry);
+				this.cache.store(key, entry);
 			}
 		}
 	}
@@ -297,11 +300,11 @@ public class CachePlugin {
 	}
 
 
-	private static String getCacheKey(HTTPMessage request) {
+	public static String getCacheKey(HTTPMessage request) {
 		return CachePlugin.getCacheKey(request.getMethod(), request.getScheme(), request.getAuthority(), request.getOrigPath());
 	}
 
-	private static String getCacheKey(String method, String scheme, String authority, String path) {
+	public static String getCacheKey(String method, String scheme, String authority, String path) {
 		return method + " " + scheme + "://" + authority + path;
 	}
 
@@ -403,6 +406,9 @@ public class CachePlugin {
 			this.correctedAgeValue = CachePlugin.parseIntSafe(response.getHeader("age"), 0)
 					+ (int) ((response.getCreatedTime() - response.getCorrespondingMessage().getCreatedTime()) / 1000);
 
+			this.response.setCorrespondingMessage(this.request);
+			this.request.setCorrespondingMessage(this.response);
+
 			if(!this.response.headerExists("date"))
 				this.response.setHeader("date", HTTPCommon.dateString());
 		}
@@ -430,6 +436,8 @@ public class CachePlugin {
 			}
 			this.data = null;
 
+			this.request.lock();
+			this.response.lock();
 			return new CacheEntry(this.request, this.response, data, time() + (this.ceProperties.getMaxAge() - this.correctedAgeValue) * 1000L, this.correctedAgeValue,
 					this.ceProperties);
 		}
