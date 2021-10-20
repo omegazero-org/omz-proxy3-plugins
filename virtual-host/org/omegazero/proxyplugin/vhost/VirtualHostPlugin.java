@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 import org.omegazero.common.config.ConfigArray;
@@ -29,7 +30,6 @@ import org.omegazero.common.logging.LoggerUtil;
 import org.omegazero.net.socket.SocketConnection;
 import org.omegazero.proxy.http.HTTPMessage;
 import org.omegazero.proxy.net.UpstreamServer;
-import org.omegazero.proxy.util.ProxyUtil;
 
 @EventBusSubscriber
 public class VirtualHostPlugin {
@@ -38,11 +38,12 @@ public class VirtualHostPlugin {
 
 
 	private Map<String, ConfigObject> templates = new HashMap<>();
-	private List<VirtualHost> hosts = new ArrayList<>();
+	private VHostNode rootNode;
 
 	public synchronized void configurationReload(ConfigObject config) throws UnknownHostException {
 		this.templates.clear();
-		this.hosts.clear();
+		this.rootNode = new VHostNode();
+
 		ConfigArray hostsArray = config.optArray("hosts");
 		if(hostsArray == null){
 			logger.warn("hosts array was not configured, this plugin will have no effect");
@@ -67,20 +68,16 @@ public class VirtualHostPlugin {
 					if(!(o instanceof String))
 						throw new IllegalArgumentException("Elements in 'hostname' array must be strings");
 					VirtualHost vh = this.getVHost((String) o, path, host);
-					this.hosts.add(vh);
+					this.addVHost(vh);
 					logger.debug("Added aggregated virtual host ", vh);
 				}
 			}else if(hostnameObj instanceof String){
 				VirtualHost vh = this.getVHost((String) hostnameObj, path, host);
-				this.hosts.add(vh);
+				this.addVHost(vh);
 				logger.debug("Added virtual host ", vh);
 			}else
 				throw new IllegalArgumentException("'hostname' must either be a string or an array");
 		}
-		// longer paths always overpower shorter ones, and doing this once at init is better than searching the virtual host with the longest path for every request
-		this.hosts.sort((c1, c2) -> {
-			return c2.getPath().length() - c1.getPath().length();
-		});
 	}
 
 	private VirtualHost getVHost(String hostnamePath, String dpath, ConfigObject host) throws UnknownHostException {
@@ -176,6 +173,32 @@ public class VirtualHostPlugin {
 		}
 	}
 
+	private void addVHost(VirtualHost vhost) {
+		String[] domainParts = vhost.getHost().split("\\.");
+		VHostNode cnode = this.rootNode;
+		for(int i = domainParts.length - 1; i >= 0; i--){
+			String p = domainParts[i];
+			if(p.length() < 1){
+				throw new IllegalArgumentException("Domain part is empty in virtual host " + vhost);
+			}else if(p.equals("*")){
+				if(cnode.nextAny != null)
+					throw new IllegalArgumentException("A wildcard is already configured for this domain: " + vhost.getHost());
+				if(i > 0)
+					throw new IllegalArgumentException("A wildcard must only occur at the lowest level domain name");
+				cnode.nextAny = new VHostNode();
+				cnode = cnode.nextAny;
+			}else{
+				VHostNode nnode = cnode.next.get(p);
+				if(nnode == null){
+					nnode = new VHostNode();
+					cnode.next.put(p, nnode);
+				}
+				cnode = nnode;
+			}
+		}
+		cnode.addHost(vhost);
+	}
+
 
 	@SubscribeEvent
 	public UpstreamServer selectUpstreamServer(String hostname, String path) {
@@ -222,29 +245,49 @@ public class VirtualHostPlugin {
 
 
 	private synchronized VirtualHost selectHost(String hostname, String path) {
-		int portStart = hostname.lastIndexOf(':');
-		boolean hasPort;
-		if(portStart > 0){
-			hasPort = true;
-			// check if string behind ':' could actually be a port (for ipv6, the end could look like ":1234]", which obviously isnt a port)
-			for(int j = portStart + 1; j < hostname.length(); j++){
-				char c = hostname.charAt(j);
-				if(c < '0' || c > '9'){
-					hasPort = false;
-					break;
-				}
-			}
-		}else
-			hasPort = false;
-		for(VirtualHost host : this.hosts){
-			if(path.startsWith(host.getPath())){
-				String chn = hostname;
-				if(hasPort && host.isPortWildcard())
-					chn = hostname.substring(0, portStart); // remove trailing port specified because port doesnt matter
-				if(ProxyUtil.hostMatches(host.getHost(), chn))
-					return host;
-			}
+		String hportStr = VirtualHost.getPortStr(hostname);
+
+		String domain = hostname;
+		if(hportStr != null)
+			domain = hostname.substring(0, hostname.length() - hportStr.length() - 1);
+		String[] domainParts = domain.split("\\.");
+		VHostNode cnode = this.rootNode;
+		for(int i = domainParts.length - 1; i >= 0; i--){
+			String p = domainParts[i];
+			if(p.length() < 1)
+				return null;
+			VHostNode nnode = cnode.next.get(p);
+			if(nnode == null)
+				nnode = cnode.nextAny;
+			if(nnode == null)
+				return null;
+			cnode = nnode;
+		}
+
+		for(VirtualHost host : cnode.hosts){
+			if(!host.isPortWildcard() && !Objects.equals(host.getHostPortStr(), hportStr))
+				continue;
+			if(path.startsWith(host.getPath()))
+				return host;
 		}
 		return null;
+	}
+
+
+	private static class VHostNode {
+
+		public Map<String, VHostNode> next = new HashMap<>();
+		public VHostNode nextAny = null;
+		public List<VirtualHost> hosts = new ArrayList<>();
+
+		public void addHost(VirtualHost vhost) {
+			for(int i = 0; i < this.hosts.size(); i++){
+				if(vhost.getPath().length() > this.hosts.get(i).getPath().length()){
+					this.hosts.add(i, vhost);
+					return;
+				}
+			}
+			this.hosts.add(vhost);
+		}
 	}
 }

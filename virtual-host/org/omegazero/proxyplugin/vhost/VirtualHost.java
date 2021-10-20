@@ -28,10 +28,12 @@ public class VirtualHost extends UpstreamServer {
 	private final String hostOverride;
 	private final ConfigObject config;
 
+	private final String hostPortStr;
+
 	public VirtualHost(String host, String path, boolean preservePath, boolean portWildcard, String prependPath, InetAddress upstreamAddress, int upstreamAddressTTL,
 			int plainPort, int securePort, java.util.Set<String> protos, boolean redirectInsecure, String hostOverride, ConfigObject config) {
 		super(upstreamAddress, upstreamAddressTTL, plainPort, securePort, protos);
-		this.host = Objects.requireNonNull(host);
+		Objects.requireNonNull(host);
 		this.path = Objects.requireNonNull(path);
 		this.preservePath = preservePath;
 		this.portWildcard = portWildcard;
@@ -39,11 +41,18 @@ public class VirtualHost extends UpstreamServer {
 		this.redirectInsecure = redirectInsecure;
 		this.hostOverride = hostOverride;
 		this.config = config;
+
+		this.hostPortStr = getPortStr(host);
+		this.host = this.hostPortStr != null ? host.substring(0, host.length() - this.hostPortStr.length() - 1) : host;
 	}
 
 
 	public String getHost() {
 		return this.host;
+	}
+
+	public String getHostPortStr() {
+		return this.hostPortStr;
 	}
 
 	public String getPath() {
@@ -92,6 +101,20 @@ public class VirtualHost extends UpstreamServer {
 
 	@Override
 	public String toString() {
-		return this.host + (this.portWildcard ? ":*" : "") + this.path + " -> " + super.toString();
+		return this.host + (this.portWildcard ? ":*" : (this.hostPortStr != null ? ":" + this.hostPortStr : "")) + this.path + " -> " + super.toString();
+	}
+
+
+	public static String getPortStr(String hostname) {
+		int portStart = hostname.lastIndexOf(':');
+		if(portStart <= 0)
+			return null;
+		// check if string behind ':' could actually be a port (for ipv6, the end could look like ":1234]", which obviously isnt a port)
+		for(int j = portStart + 1; j < hostname.length(); j++){
+			char c = hostname.charAt(j);
+			if(c < '0' || c > '9')
+				return null;
+		}
+		return hostname.substring(portStart + 1);
 	}
 }
