@@ -189,7 +189,9 @@ public class CachePlugin {
 		CacheEntry entry = this.cache.fetch(key);
 		// if the entry already exists, it will be replaced if this response finishes
 
-		this.tryStartCachingResponse(upstreamConnection, response, upstreamServer, key);
+		boolean cacheable = this.tryStartCachingResponse(upstreamConnection, response, upstreamServer, key);
+		if(!cacheable && entry != null) // response is not cacheable, remove the cache entry (likely cache-control changed since response was cached)
+			this.cache.delete(key);
 
 		this.addHeaders(response, entry, false);
 	}
@@ -230,19 +232,21 @@ public class CachePlugin {
 				"content-type", "application/json");
 	}
 
-	private void tryStartCachingResponse(SocketConnection upstreamConnection, HTTPMessage response, UpstreamServer upstreamServer, String key) {
+	private boolean tryStartCachingResponse(SocketConnection upstreamConnection, HTTPMessage response, UpstreamServer upstreamServer, String key) {
 		CacheConfig cc = this.getConfig(upstreamServer);
 		CacheEntry.Properties properties = cc.getResourceProperties(response);
 		if(properties != null){
 			synchronized(this.pendingCacheEntries){
 				for(PendingCacheEntry p : this.pendingCacheEntries.values()){
 					if(p.key.equals(key)) // there is already a pending entry for this key
-						return;
+						return true;
 				}
 				PendingCacheEntry pce = new PendingCacheEntry(upstreamConnection, response, properties);
 				this.pendingCacheEntries.put(response, pce);
 			}
-		}
+			return true;
+		}else
+			return false;
 	}
 
 	private void addHeaders(HTTPMessage msg, CacheEntry entry, boolean hit) {
