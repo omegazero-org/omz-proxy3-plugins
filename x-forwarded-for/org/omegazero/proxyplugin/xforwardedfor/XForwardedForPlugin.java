@@ -36,6 +36,9 @@ public class XForwardedForPlugin {
 	private static final Pattern IPV4_REGEX = Pattern.compile("([0-9]{1,3}\\.){3}[0-9]{1,3}(:[0-9]{1,5})?");
 	private static final Pattern IPV6_REGEX = Pattern.compile("\\[[0-9a-zA-Z]*:[0-9a-zA-Z:]+\\](:[0-9]{1,5})?");
 
+	private static final String HEADER_XFF = "x-forwarded-for";
+	private static final String HEADER_XFP = "x-forwarded-proto";
+
 
 	private String[] allowedClients;
 	private Object[] expectedParts;
@@ -46,6 +49,7 @@ public class XForwardedForPlugin {
 	private boolean enableDownstream;
 	private boolean enableUpstream;
 	private boolean forwardHeader;
+	private boolean enableForwardProto;
 
 
 	public synchronized void configurationReload(ConfigObject config) {
@@ -90,24 +94,27 @@ public class XForwardedForPlugin {
 		this.enableDownstream = config.optBoolean("enableDownstream", true);
 		this.enableUpstream = config.optBoolean("enableUpstream", true);
 		this.forwardHeader = config.optBoolean("forwardHeader", true);
+		this.enableForwardProto = config.optBoolean("enableForwardProto", true);
 	}
 
 
 	@SubscribeEvent(priority = Priority.HIGH)
 	public void onHTTPRequestPreLog(SocketConnection downstreamConnection, HTTPMessage http) {
-		String xff = http.getHeader("x-forwarded-for");
 		if(this.enableDownstream && downstreamConnection.getApparentRemoteAddress() == downstreamConnection.getRemoteAddress())
-			this.detectClientAddress(downstreamConnection, http, xff);
-		if(!this.forwardHeader && xff != null){
-			http.deleteHeader("x-forwarded-for");
-			xff = null;
+			this.detectClientAddress(downstreamConnection, http);
+		if(!this.forwardHeader){
+			http.deleteHeader(HEADER_XFF);
+			http.deleteHeader(HEADER_XFP);
 		}
 		if(this.enableUpstream)
-			this.forwardClientAddress(downstreamConnection, http, xff);
+			http.appendHeader(HEADER_XFF, addressToString((InetSocketAddress) downstreamConnection.getRemoteAddress(), this.includePortNumber));
+		if(this.enableForwardProto)
+			http.appendHeader(HEADER_XFP, http.getScheme());
 	}
 
 
-	private void detectClientAddress(SocketConnection downstreamConnection, HTTPMessage http, String xff) {
+	private void detectClientAddress(SocketConnection downstreamConnection, HTTPMessage http) {
+		String xff = http.getHeader(HEADER_XFF);
 		if(xff == null){
 			if(this.requireHeader){
 				logger.warn("Rejecting request without X-Forwarded-For header from ", downstreamConnection.getRemoteAddress());
@@ -171,13 +178,6 @@ public class XForwardedForPlugin {
 		}else{
 			logger.warn("Ignoring disallowed X-Forwarded-For header from ", downstreamConnection.getRemoteAddress());
 		}
-	}
-
-	private void forwardClientAddress(SocketConnection downstreamConnection, HTTPMessage http, String xff) {
-		String naddr = addressToString((InetSocketAddress) downstreamConnection.getRemoteAddress(), this.includePortNumber);
-		if(xff != null)
-			naddr = xff + ", " + naddr;
-		http.setHeader("x-forwarded-for", naddr);
 	}
 
 
