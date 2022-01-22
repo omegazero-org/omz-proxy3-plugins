@@ -33,8 +33,6 @@ import org.omegazero.proxy.http.HTTPCommon;
 import org.omegazero.proxy.http.HTTPMessage;
 import org.omegazero.proxy.http.HTTPMessageData;
 import org.omegazero.proxy.net.UpstreamServer;
-import org.omegazero.proxyaccelerator.cache.impl.LRUCache;
-import org.omegazero.proxyaccelerator.cache.impl.SoftReferenceCache;
 import org.omegazero.proxyaccelerator.cache.integration.VHostIntegration;
 
 @EventBusSubscriber
@@ -95,9 +93,7 @@ public class CachePlugin {
 	public void onInit() {
 		this.reloadCache();
 
-		Tasks.interval((a) -> {
-			CachePlugin.this.cleanup();
-		}, 60000).daemon();
+		Tasks.interval(this::cleanup, 60000).daemon();
 	}
 
 	@SubscribeEvent
@@ -450,10 +446,10 @@ public class CachePlugin {
 
 	static{
 		CachePlugin.registerCacheImplementation("lru", () -> {
-			return new LRUCache();
+			return new org.omegazero.proxyaccelerator.cache.impl.LRUCache();
 		});
 		CachePlugin.registerCacheImplementation("softreference", () -> {
-			return new SoftReferenceCache();
+			return new org.omegazero.proxyaccelerator.cache.impl.SoftReferenceCache();
 		});
 	}
 }

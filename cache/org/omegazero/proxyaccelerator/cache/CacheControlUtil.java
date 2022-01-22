@@ -11,9 +11,22 @@
  */
 package org.omegazero.proxyaccelerator.cache;
 
+/**
+ * Class used for parsing <i>Cache-Control</i> HTTP headers.
+ */
 public final class CacheControlUtil {
 
 
+	private CacheControlUtil() {
+	}
+
+
+	/**
+	 * Parses the given <b>value</b> of a <i>Cache-Control</i> HTTP header.
+	 * 
+	 * @param value The value string of the header
+	 * @return The parsed {@link CacheControlParameters}
+	 */
 	public static CacheControlParameters parseCacheControl(String value) {
 		CacheControlParameters params = new CacheControlParameters();
 		String[] parts = value.toLowerCase().split(",");
@@ -72,6 +85,11 @@ public final class CacheControlUtil {
 	}
 
 
+	/**
+	 * Contains the parsed properties of a <i>Cache-Control</i> HTTP header.
+	 * 
+	 * @see CacheControlUtil#parseCacheControl(String)
+	 */
 	public static class CacheControlParameters {
 
 		public static final int MUST_REVALIDATE = 1;
@@ -92,23 +110,23 @@ public final class CacheControlUtil {
 
 
 		public int getFlags() {
-			return flags;
+			return this.flags;
 		}
 
 		public int getMaxAge() {
-			return maxAge;
+			return this.maxAge;
 		}
 
 		public int getMaxAgeShared() {
-			return maxAgeShared;
+			return this.maxAgeShared;
 		}
 
 		public int getMaxStale() {
-			return maxStale;
+			return this.maxStale;
 		}
 
 		public int getMinFresh() {
-			return minFresh;
+			return this.minFresh;
 		}
 	}
 }
