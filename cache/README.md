@@ -34,6 +34,7 @@ The default configuration for all paths is in the plugin configuration object di
 | maxResourceSize | number | The maximum resource size that will be attempted to be cached. | no | 0x100000 `(1 MiB)` |
 | purgeKey | string | The required header value of the request header `X-Purge-Key` when requesting a resource to be purged using the PURGE method. If `null`, purging will be disabled; if an empty string, the header is not required and any client may purge resources from the cache. | no | null |
 | propagatePurgeRequest | boolean | Whether to forward a PURGE request to the origin server if purging is disabled or the requested resource does not exist. | no | false |
+| wildcardPurgeEnabled | boolean | Enables bulk resource purging using wildcards. | no | false |
 | overrides | array(object) | Array of objects to override the default cache behavior on a specific path and hostname. The objects in this array have the same properties as this object, with some additional properties (see below). | no | `empty` |
 
 #### Path-specific configuration
@@ -90,6 +91,8 @@ Resources may be purged using the HTTP request method PURGE, if enabled in the c
 
 The resource being purged is identified by the request URL \[authority or `Host` header\] and path.
 An optional additional `X-Purge-Method` header specifies the request method of the resource that should be purged.
+
+If enabled, multiple resources may be purged at once using a wildcard (`**`) at the end of the path. All resources with paths starting with this wildcard path will be purged.
 
 If successful, the server responds with status code 200, otherwise, if the resource does not exist, with status code 404.
 

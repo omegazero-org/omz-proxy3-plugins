@@ -17,6 +17,7 @@ import java.lang.ref.SoftReference;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.function.Predicate;
 
 import org.omegazero.common.logging.Logger;
 import org.omegazero.common.logging.LoggerUtil;
@@ -72,6 +73,19 @@ public class SoftReferenceCache implements ResourceCache {
 			return null;
 		else
 			return ref.get();
+	}
+
+	@Override
+	public synchronized int deleteIfKey(Predicate<String> filter) {
+		int deleted = 0;
+		Iterator<String> iterator = this.cache.keySet().iterator();
+		while(iterator.hasNext()){
+			if(filter.test(iterator.next())){
+				iterator.remove();
+				deleted++;
+			}
+		}
+		return deleted;
 	}
 
 	@Override

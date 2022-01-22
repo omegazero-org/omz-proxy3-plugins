@@ -109,20 +109,34 @@ public class CachePlugin {
 			String purgeKey = cco.getPurgeKey();
 			if(purgeKey == null){ // disabled
 				if(!cco.isPropagatePurgeRequest())
-					this.purgeReply(request, HTTPCommon.STATUS_METHOD_NOT_ALLOWED, "disabled");
+					this.purgeReply(request, HTTPCommon.STATUS_METHOD_NOT_ALLOWED, "disabled", null);
 			}else if(purgeKey.length() > 0 && !purgeKey.equals(request.getHeader("x-purge-key"))){
-				this.purgeReply(request, HTTPCommon.STATUS_UNAUTHORIZED, "unauthorized");
+				this.purgeReply(request, HTTPCommon.STATUS_UNAUTHORIZED, "unauthorized", null);
 			}else{
 				String purgeMethod = request.getHeader("x-purge-method");
 				if(purgeMethod == null)
 					purgeMethod = "GET";
-				String key = CachePlugin.getCacheKey(purgeMethod, request.getScheme(), request.getAuthority(), request.getOrigPath());
-				CacheEntry entry = this.cache.delete(key);
-				if(entry != null){
-					logger.debug("Purged cache entry '", key, "' (age ", entry.age(), ")");
-					this.purgeReply(request, HTTPCommon.STATUS_OK, "ok");
-				}else if(!cco.isPropagatePurgeRequest()){
-					this.purgeReply(request, HTTPCommon.STATUS_NOT_FOUND, "nonexistent");
+				String path = request.getOrigPath();
+				if(cco.isWildcardPurgeEnabled() && path.endsWith("**")){
+					String keyPrefix = CachePlugin.getCacheKey(purgeMethod, request.getScheme(), request.getAuthority(), path.substring(0, path.length() - 2));
+					int deleted = this.cache.deleteIfKey((s) -> {
+						return s.startsWith(keyPrefix);
+					});
+					if(deleted < 0){
+						this.purgeReply(request, HTTPCommon.STATUS_NOT_IMPLEMENTED, "unsupported", null);
+					}else{
+						logger.debug("Purged ", deleted, " cache entries (wildcard key: '", keyPrefix, "')");
+						this.purgeReply(request, HTTPCommon.STATUS_OK, "ok", ",\"deleted\":" + deleted);
+					}
+				}else{
+					String key = CachePlugin.getCacheKey(purgeMethod, request.getScheme(), request.getAuthority(), path);
+					CacheEntry entry = this.cache.delete(key);
+					if(entry != null){
+						logger.debug("Purged cache entry '", key, "' (age ", entry.age(), ")");
+						this.purgeReply(request, HTTPCommon.STATUS_OK, "ok", null);
+					}else if(!cco.isPropagatePurgeRequest()){
+						this.purgeReply(request, HTTPCommon.STATUS_NOT_FOUND, "nonexistent", null);
+					}
 				}
 			}
 		}else{
@@ -222,10 +236,14 @@ public class CachePlugin {
 	}
 
 
-	private void purgeReply(HTTPMessage request, int status, String statusmsg) {
-		request.getEngine().respond(request, status,
-				("{\"status\":\"" + statusmsg + "\"" + (this.cacheName != null ? (",\"server\":\"" + this.cacheServedByPrefix + this.cacheName + "\"") : "") + "}").getBytes(),
-				"content-type", "application/json");
+	private void purgeReply(HTTPMessage request, int status, String statusmsg, String additional) {
+		String resJson = "{\"status\":\"" + statusmsg + "\"";
+		if(this.cacheName != null)
+			resJson += ",\"server\":\"" + this.cacheServedByPrefix + this.cacheName + "\"";
+		if(additional != null)
+			resJson += additional;
+		resJson += "}";
+		request.getEngine().respond(request, status, resJson.getBytes(), "content-type", "application/json");
 	}
 
 	private boolean tryStartCachingResponse(SocketConnection upstreamConnection, HTTPMessage response, UpstreamServer upstreamServer, String key) {

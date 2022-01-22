@@ -11,6 +11,8 @@
  */
 package org.omegazero.proxyaccelerator.cache;
 
+import java.util.function.Predicate;
+
 import org.omegazero.common.util.PropertyUtil;
 
 /**
@@ -53,6 +55,18 @@ public interface ResourceCache {
 	 * @return The deleted {@link CacheEntry}, or <code>null</code> if there was no entry associated with the given key
 	 */
 	public CacheEntry delete(String primaryKey);
+
+	/**
+	 * Deletes all {@linkplain CacheEntry cache entries} that match the given <b>filter</b> and returns the number of deleted entries. <code>-1</code> is returned if this
+	 * method is not supported by the cache.
+	 * 
+	 * @param filter The filter
+	 * @return The number of deleted entries, or <code>-1</code> if this cache does not support this method
+	 * @since 1.3
+	 */
+	public default int deleteIfKey(Predicate<String> filter) {
+		return -1;
+	}
 
 
 	/**

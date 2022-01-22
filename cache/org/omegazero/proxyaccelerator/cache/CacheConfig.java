@@ -204,12 +204,13 @@ public class CacheConfig {
 					obj.optInt("maxAgeOverride", parent.maxAgeOverride), obj.optBoolean("maxAgeOverrideCacheableOnly", parent.maxAgeOverrideCacheableOnly),
 					obj.optBoolean("ignoreClientRefresh", parent.ignoreClientRefresh), obj.optBoolean("ignoreClientRefreshIfImmutable", parent.ignoreClientRefreshIfImmutable),
 					obj.optInt("maxResourceSize", parent.maxResourceSize), obj.optString("purgeKey", parent.purgeKey),
-					obj.optBoolean("propagatePurgeRequest", parent.propagatePurgeRequest));
+					obj.optBoolean("propagatePurgeRequest", parent.propagatePurgeRequest), obj.optBoolean("wildcardPurgeEnabled", parent.wildcardPurgeEnabled));
 		}else{
 			return new CacheConfigOverride(Pattern.compile(host), Pattern.compile(path), obj.optInt("defaultMaxAge", 0), obj.optInt("maxAgeOverride", -1),
 					obj.optBoolean("maxAgeOverrideCacheableOnly", false), obj.optBoolean("ignoreClientRefresh", false),
 					obj.optBoolean("ignoreClientRefreshIfImmutable", false), obj.optInt("maxResourceSize", 0x100000 /* 1MiB */),
-					obj.optString("purgeKey", null)/* default null = disable PURGE */, obj.optBoolean("propagatePurgeRequest", false));
+					obj.optString("purgeKey", null) /* default null = disable PURGE */, obj.optBoolean("propagatePurgeRequest", false),
+					obj.optBoolean("wildcardPurgeEnabled", false));
 		}
 	}
 
@@ -228,9 +229,10 @@ public class CacheConfig {
 
 		private final String purgeKey;
 		private final boolean propagatePurgeRequest;
+		private final boolean wildcardPurgeEnabled;
 
-		public CacheConfigOverride(Pattern hostMatcher, Pattern pathMatcher, int defaultMaxAge, int maxAgeOverride, boolean maxAgeOverrideCacheableOnly,
-				boolean ignoreClientRefresh, boolean ignoreClientRefreshIfImmutable, int maxResourceSize, String purgeKey, boolean propagatePurgeRequest) {
+		CacheConfigOverride(Pattern hostMatcher, Pattern pathMatcher, int defaultMaxAge, int maxAgeOverride, boolean maxAgeOverrideCacheableOnly, boolean ignoreClientRefresh,
+				boolean ignoreClientRefreshIfImmutable, int maxResourceSize, String purgeKey, boolean propagatePurgeRequest, boolean wildcardPurgeEnabled) {
 			this.hostMatcher = hostMatcher;
 			this.pathMatcher = pathMatcher;
 			this.defaultMaxAge = defaultMaxAge;
@@ -241,15 +243,20 @@ public class CacheConfig {
 			this.maxResourceSize = maxResourceSize;
 			this.purgeKey = purgeKey;
 			this.propagatePurgeRequest = propagatePurgeRequest;
+			this.wildcardPurgeEnabled = wildcardPurgeEnabled;
 		}
 
 
 		public String getPurgeKey() {
-			return purgeKey;
+			return this.purgeKey;
 		}
 
 		public boolean isPropagatePurgeRequest() {
-			return propagatePurgeRequest;
+			return this.propagatePurgeRequest;
+		}
+
+		public boolean isWildcardPurgeEnabled() {
+			return this.wildcardPurgeEnabled;
 		}
 	}
 
