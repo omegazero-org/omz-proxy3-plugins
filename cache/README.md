@@ -56,7 +56,7 @@ Additional properties for objects specified in the above `overrides` array.
 
     "defaultMaxAge": 3600,
     "ignoreClientRefresh": true,
-    "pathOverrides": [
+    "overrides": [
         {
             "path": "/api/.*",
             "maxAgeOverride": 0

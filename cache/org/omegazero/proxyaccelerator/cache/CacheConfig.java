@@ -175,7 +175,7 @@ public class CacheConfig {
 		if(array != null){
 			for(Object ao : array){
 				if(!(ao instanceof ConfigObject))
-					throw new IllegalArgumentException("Values in 'pathOverrides' array must be objects");
+					throw new IllegalArgumentException("Values in 'overrides' array must be objects");
 				ConfigObject oobj = (ConfigObject) ao;
 				CacheConfigOverride parent = oobj.optBoolean("inherit", true) ? defOverride : null;
 				String host = oobj.optString("hostname", ".*");
