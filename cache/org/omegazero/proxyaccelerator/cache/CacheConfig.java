@@ -104,9 +104,9 @@ public class CacheConfig {
 			if((params.getFlags() & (CacheControlParameters.MUST_REVALIDATE | CacheControlParameters.MUST_REVALIDATE_PROXY | CacheControlParameters.NOCACHE
 					| CacheControlParameters.NOSTORE | CacheControlParameters.PRIVATE)) != 0)
 				maxAge = 0;
-			else if(params.getMaxAgeShared() > 0)
+			else if(params.getMaxAgeShared() >= 0)
 				maxAge = params.getMaxAgeShared();
-			else if(params.getMaxAge() > 0)
+			else if(params.getMaxAge() >= 0)
 				maxAge = params.getMaxAge();
 			else if(statusCacheable || (params.getFlags() & CacheControlParameters.PUBLIC) != 0)
 				maxAge = override.defaultMaxAge;
