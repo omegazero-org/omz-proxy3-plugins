@@ -86,9 +86,13 @@ public class CustomHeadersPlugin {
 	}
 
 	private void addHeadersFromList(List<Header> headers, HTTPMessage msg, boolean up) {
+		String requestPath = msg.isRequest() ? msg.getPath() : msg.getCorrespondingMessage().getPath();
 		for(Header header : headers){
 			if((up && (header.direction & Header.DIRECTION_UP) == 0) || (!up && (header.direction & Header.DIRECTION_DOWN) == 0))
 				continue;
+			if(!(header.requestPath == null || (header.requestPath.matcher(requestPath).matches() ^ header.requestPathBlacklist)))
+				continue;
+
 			String prevVal = msg.getHeader(header.key);
 			if(prevVal == null && (header.mode & Header.MODE_IF_EXIST) != 0)
 				continue;
@@ -145,8 +149,18 @@ public class CustomHeadersPlugin {
 			int mode = resolveMode(headerObj.optString("mode", "keep"));
 			String value = headerObj.getString("value");
 			Header header = new Header(headerObj.getString("key").toLowerCase(), value.length() > 0 ? value : null, direction, mode);
+
 			if((header.mode & (Header.MODE_APPEND | Header.MODE_PREPEND)) != 0)
 				header.separator = headerObj.getString("separator");
+
+			String requestPath = headerObj.optString("requestPath", null);
+			if(requestPath != null){
+				if(requestPath.startsWith("!")){
+					requestPath = requestPath.substring(1);
+					header.requestPathBlacklist = true;
+				}
+				header.requestPath = Pattern.compile(requestPath);
+			}
 
 			Object reqStatus = headerObj.get("requiredStatus");
 			if(reqStatus instanceof ConfigArray){
@@ -240,6 +254,8 @@ public class CustomHeadersPlugin {
 		private final int mode;
 
 		private String separator;
+		private Pattern requestPath;
+		private boolean requestPathBlacklist = false;
 		private int[] requiredStatus = null;
 		private boolean requiredStatusWhitelist = false;
 		private Map<String, Pattern> requiredHeaders = new HashMap<>();
