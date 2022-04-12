@@ -11,7 +11,7 @@
  */
 package org.omegazero.proxyplugin.mirror.transformer;
 
-import org.omegazero.proxy.http.HTTPMessage;
+import org.omegazero.proxy.http.ProxyHTTPRequest;
 import org.omegazero.proxyplugin.mirror.Transformer;
 import org.omegazero.proxyplugin.mirror.TransformerReplacements;
 
@@ -24,7 +24,7 @@ public class AuthorityTransformer extends Transformer {
 
 
 	@Override
-	public byte[] transform(HTTPMessage request, String mimeType, byte[] data) {
+	public byte[] transform(ProxyHTTPRequest request, String mimeType, byte[] data) {
 		return super.forEachTransformable(mimeType, data, (part) -> {
 			String str = new String(part);
 			if(!ABSOLUTE_URL_PATTERN.matcher(str).matches())

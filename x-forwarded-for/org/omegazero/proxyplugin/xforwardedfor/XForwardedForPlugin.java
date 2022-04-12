@@ -23,9 +23,9 @@ import org.omegazero.common.eventbus.SubscribeEvent;
 import org.omegazero.common.eventbus.SubscribeEvent.Priority;
 import org.omegazero.common.logging.Logger;
 import org.omegazero.common.logging.LoggerUtil;
+import org.omegazero.http.util.HTTPStatus;
 import org.omegazero.net.socket.SocketConnection;
-import org.omegazero.proxy.http.HTTPCommon;
-import org.omegazero.proxy.http.HTTPMessage;
+import org.omegazero.proxy.http.ProxyHTTPRequest;
 import org.omegazero.proxy.util.ProxyUtil;
 
 @EventBusSubscriber
@@ -99,7 +99,7 @@ public class XForwardedForPlugin {
 
 
 	@SubscribeEvent(priority = Priority.HIGH)
-	public void onHTTPRequestPreLog(SocketConnection downstreamConnection, HTTPMessage http) {
+	public void onHTTPRequestPreLog(SocketConnection downstreamConnection, ProxyHTTPRequest http) {
 		if(this.enableDownstream && downstreamConnection.getApparentRemoteAddress() == downstreamConnection.getRemoteAddress())
 			this.detectClientAddress(downstreamConnection, http);
 		if(!this.forwardHeader){
@@ -113,12 +113,12 @@ public class XForwardedForPlugin {
 	}
 
 
-	private void detectClientAddress(SocketConnection downstreamConnection, HTTPMessage http) {
+	private void detectClientAddress(SocketConnection downstreamConnection, ProxyHTTPRequest http) {
 		String xff = http.getHeader(HEADER_XFF);
 		if(xff == null){
 			if(this.requireHeader){
 				logger.warn("Rejecting request without X-Forwarded-For header from ", downstreamConnection.getRemoteAddress());
-				http.getEngine().respondError(http, HTTPCommon.STATUS_FORBIDDEN, "Forbidden", "Rejected by XFF settings.");
+				http.respondError(HTTPStatus.STATUS_FORBIDDEN, "Rejected by XFF settings");
 			}
 			return;
 		}
@@ -137,7 +137,7 @@ public class XForwardedForPlugin {
 		if(!allowedClient){
 			if(this.enforceAllowedClients){
 				logger.warn("Rejecting request with X-Forwarded-For header from disallowed client ", downstreamConnection.getRemoteAddress());
-				http.getEngine().respondError(http, HTTPCommon.STATUS_FORBIDDEN, "Forbidden", "Rejected by XFF settings.");
+				http.respondError(HTTPStatus.STATUS_FORBIDDEN, "Rejected by XFF settings");
 			}else
 				logger.warn("Ignoring X-Forwarded-For header in request from disallowed client ", downstreamConnection.getRemoteAddress());
 			return;
@@ -174,7 +174,7 @@ public class XForwardedForPlugin {
 			}
 		}else if(this.enforceExpectedParts){
 			logger.warn("Rejecting request with disallowed X-Forwarded-For header from ", downstreamConnection.getRemoteAddress());
-			http.getEngine().respondError(http, HTTPCommon.STATUS_FORBIDDEN, "Forbidden", "Rejected by XFF settings.");
+			http.respondError(HTTPStatus.STATUS_FORBIDDEN, "Rejected by XFF settings");
 		}else{
 			logger.warn("Ignoring disallowed X-Forwarded-For header from ", downstreamConnection.getRemoteAddress());
 		}

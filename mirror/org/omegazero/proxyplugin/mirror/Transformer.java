@@ -16,7 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 
-import org.omegazero.proxy.http.HTTPMessage;
+import org.omegazero.proxy.http.ProxyHTTPRequest;
 import org.omegazero.proxyplugin.mirror.transformer.HTMLTransformerReader;
 
 public abstract class Transformer {
@@ -34,7 +34,7 @@ public abstract class Transformer {
 	}
 
 
-	public abstract byte[] transform(HTTPMessage request, String mimeType, byte[] data);
+	public abstract byte[] transform(ProxyHTTPRequest request, String mimeType, byte[] data);
 
 
 	protected byte[] forEachTransformable(String mimeType, byte[] data, Function<byte[], byte[]> transformer) {

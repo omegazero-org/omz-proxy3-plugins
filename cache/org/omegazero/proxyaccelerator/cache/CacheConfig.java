@@ -20,7 +20,9 @@ import java.util.regex.Pattern;
 import org.omegazero.common.config.ConfigArray;
 import org.omegazero.common.config.ConfigObject;
 import org.omegazero.common.util.PropertyUtil;
-import org.omegazero.proxy.http.HTTPMessage;
+import org.omegazero.http.common.HTTPMessage;
+import org.omegazero.http.common.HTTPRequest;
+import org.omegazero.http.common.HTTPResponse;
 import org.omegazero.proxyaccelerator.cache.CacheControlUtil.CacheControlParameters;
 
 public class CacheConfig {
@@ -36,9 +38,9 @@ public class CacheConfig {
 	}
 
 
-	public CacheConfigOverride getOverride(HTTPMessage request) {
+	public CacheConfigOverride getOverride(HTTPRequest request) {
 		String host = request.getAuthority();
-		String path = request.getOrigPath();
+		String path = request.getPath();
 		if(host == null)
 			host = "";
 		for(CacheConfigOverride override : this.overrides){
@@ -55,14 +57,14 @@ public class CacheConfig {
 	 * @param response
 	 * @return Cache properties of the response, or <code>null</code> if the response is not cacheable
 	 */
-	public CacheEntry.Properties getResourceProperties(HTTPMessage response) {
+	public CacheEntry.Properties getResourceProperties(HTTPResponse response) {
 		int rstatus = response.getStatus();
 		// <200 must not be cached; 206 (Range response) is not supported; 304 standalone should not be cached, but it still contains the cache-control header
 		// for other response codes >=400, the upstream server should decide in a cache-control header whether it makes sense to cache the response
 		if(rstatus < 200 || rstatus == 206 || rstatus == 304)
 			return null;
 
-		HTTPMessage request = response.getCorrespondingMessage();
+		HTTPRequest request = response.getOther();
 		if(request == null)
 			throw new NullPointerException("request is null");
 

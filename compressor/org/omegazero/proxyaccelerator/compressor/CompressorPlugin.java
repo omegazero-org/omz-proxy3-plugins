@@ -25,10 +25,11 @@ import org.omegazero.common.eventbus.SubscribeEvent;
 import org.omegazero.common.eventbus.SubscribeEvent.Priority;
 import org.omegazero.common.logging.Logger;
 import org.omegazero.common.logging.LoggerUtil;
+import org.omegazero.http.common.HTTPRequest;
+import org.omegazero.http.common.HTTPResponse;
+import org.omegazero.http.common.HTTPResponseData;
 import org.omegazero.net.socket.SocketConnection;
 import org.omegazero.proxy.core.Proxy;
-import org.omegazero.proxy.http.HTTPMessage;
-import org.omegazero.proxy.http.HTTPMessageData;
 import org.omegazero.proxy.net.UpstreamServer;
 import org.omegazero.proxyaccelerator.cache.CachePlugin;
 import org.omegazero.proxyaccelerator.cache.VaryComparator;
@@ -70,7 +71,7 @@ public class CompressorPlugin {
 	}
 
 	@SubscribeEvent(priority = Priority.LOW)
-	public void onHTTPResponse(SocketConnection downstreamConnection, SocketConnection upstreamConnection, HTTPMessage response, UpstreamServer upstreamServer)
+	public void onHTTPResponse(SocketConnection downstreamConnection, SocketConnection upstreamConnection, HTTPResponse response, UpstreamServer upstreamServer)
 			throws IOException {
 		if(!response.isChunkedTransfer() && this.onlyIfChunked)
 			return;
@@ -90,7 +91,7 @@ public class CompressorPlugin {
 		if(!this.isMimeTypeEnabled(ctype))
 			return;
 
-		HTTPMessage request = response.getCorrespondingMessage();
+		HTTPRequest request = response.getOther();
 		String acceptEncoding = request.getHeader("accept-encoding");
 		if(acceptEncoding == null)
 			return;
@@ -130,7 +131,7 @@ public class CompressorPlugin {
 	}
 
 	@SubscribeEvent(priority = Priority.LOW)
-	public void onHTTPResponseData(SocketConnection downstreamConnection, SocketConnection upstreamConnection, HTTPMessageData responsedata, UpstreamServer upstreamServer)
+	public void onHTTPResponseData(SocketConnection downstreamConnection, SocketConnection upstreamConnection, HTTPResponseData responsedata, UpstreamServer upstreamServer)
 			throws IOException {
 		Compressor compressor = (Compressor) responsedata.getHttpMessage().getAttachment("compressor_instance");
 		if(compressor == null)

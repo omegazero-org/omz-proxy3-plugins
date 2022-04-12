@@ -27,8 +27,8 @@ import org.omegazero.common.eventbus.SubscribeEvent;
 import org.omegazero.common.eventbus.SubscribeEvent.Priority;
 import org.omegazero.common.logging.Logger;
 import org.omegazero.common.logging.LoggerUtil;
+import org.omegazero.http.common.HTTPRequest;
 import org.omegazero.net.socket.SocketConnection;
-import org.omegazero.proxy.http.HTTPMessage;
 import org.omegazero.proxy.net.UpstreamServer;
 import org.omegazero.proxy.util.ProxyUtil;
 
@@ -103,11 +103,11 @@ public class ProxyResourcesPlugin {
 
 
 	@SubscribeEvent(priority = Priority.HIGH)
-	public synchronized void onHTTPRequestPre(SocketConnection downstreamConnection, HTTPMessage request, UpstreamServer userver) {
+	public synchronized void onHTTPRequestPre(SocketConnection downstreamConnection, HTTPRequest request, UpstreamServer userver) {
 		Resource res = this.getResource(request.getScheme(), request.getAuthority(), request.getPath());
 		if(res != null){
 			logger.debug("Serving resource ", res);
-			request.getEngine().respond(request, res.status, res.data, res.headers);
+			request.respond(res.status, res.data, res.headers);
 		}
 	}
 

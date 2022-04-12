@@ -26,8 +26,10 @@ import org.omegazero.common.eventbus.SubscribeEvent;
 import org.omegazero.common.eventbus.SubscribeEvent.Priority;
 import org.omegazero.common.logging.Logger;
 import org.omegazero.common.logging.LoggerUtil;
+import org.omegazero.http.util.HTTPStatus;
 import org.omegazero.net.socket.SocketConnection;
-import org.omegazero.proxy.http.HTTPMessage;
+import org.omegazero.proxy.http.ProxyHTTPRequest;
+import org.omegazero.proxy.http.ProxyHTTPResponse;
 import org.omegazero.proxy.net.UpstreamServer;
 import org.omegazero.proxyplugin.vhost.VirtualHost;
 
@@ -58,19 +60,19 @@ public class BasicAuthPlugin {
 
 
 	@SubscribeEvent(priority = Priority.HIGH)
-	public void onHTTPRequestPre(SocketConnection downstreamConnection, HTTPMessage request, UpstreamServer userver) {
+	public void onHTTPRequestPre(SocketConnection downstreamConnection, ProxyHTTPRequest request, UpstreamServer userver) {
 		if(userver instanceof VirtualHost){
 			VirtualHost vhost = (VirtualHost) userver;
 			if(!this.isAuthenticated(request, vhost)){
 				String r = request.getAuthority() + vhost.getPath();
 				logger.info(request.getRequestId(), " Login to ", r);
-				request.getEngine().respond(request, 401, new byte[0], "WWW-Authenticate", "Basic realm=\"Access to '" + r + "' is restricted\", charset=\"UTF-8\"");
+				request.respond(HTTPStatus.STATUS_UNAUTHORIZED, new byte[0], "WWW-Authenticate", "Basic realm=\"Access to '" + r + "' is restricted\", charset=\"UTF-8\"");
 			}
 		}
 	}
 
 	@SubscribeEvent
-	public void onHTTPResponse(SocketConnection downstreamConnection, SocketConnection upstreamConnection, HTTPMessage response, UpstreamServer userver) {
+	public void onHTTPResponse(SocketConnection downstreamConnection, SocketConnection upstreamConnection, ProxyHTTPResponse response, UpstreamServer userver) {
 		if(userver instanceof VirtualHost){
 			VirtualHost vhost = (VirtualHost) userver;
 			if(vhost.getConfig().optArray("users") != null){
@@ -79,7 +81,7 @@ public class BasicAuthPlugin {
 		}
 	}
 
-	private synchronized boolean isAuthenticated(HTTPMessage request, VirtualHost vhost) {
+	private synchronized boolean isAuthenticated(ProxyHTTPRequest request, VirtualHost vhost) {
 		ConfigArray uarr = vhost.getConfig().optArray("users");
 		if(uarr != null){
 			String authRequest = request.getHeader("authorization");

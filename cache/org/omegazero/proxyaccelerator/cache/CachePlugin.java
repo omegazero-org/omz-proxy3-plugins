@@ -27,11 +27,15 @@ import org.omegazero.common.eventbus.SubscribeEvent;
 import org.omegazero.common.eventbus.SubscribeEvent.Priority;
 import org.omegazero.common.logging.Logger;
 import org.omegazero.common.logging.LoggerUtil;
+import org.omegazero.http.common.HTTPMessage;
+import org.omegazero.http.common.HTTPRequest;
+import org.omegazero.http.common.HTTPResponse;
+import org.omegazero.http.common.HTTPResponseData;
+import org.omegazero.http.util.HTTPStatus;
 import org.omegazero.net.socket.SocketConnection;
 import org.omegazero.proxy.core.Proxy;
 import org.omegazero.proxy.http.HTTPCommon;
-import org.omegazero.proxy.http.HTTPMessage;
-import org.omegazero.proxy.http.HTTPMessageData;
+import org.omegazero.proxy.http.ProxyHTTPRequest;
 import org.omegazero.proxy.net.UpstreamServer;
 import org.omegazero.proxyaccelerator.cache.integration.VHostIntegration;
 
@@ -43,13 +47,13 @@ public class CachePlugin {
 	private static Map<String, Supplier<ResourceCache>> cacheTypes = new ConcurrentHashMap<>();
 	private static Map<String, VaryComparator> varyComparators = new ConcurrentHashMap<>();
 
-	public static final Event EVENT_CACHE_HIT = new Event("cache_hit", new Class<?>[] { HTTPMessage.class, HTTPMessageData.class });
-	public static final Event EVENT_CACHE_MISS = new Event("cache_miss", new Class<?>[] { HTTPMessage.class });
-	public static final Event EVENT_CACHE_PURGE = new Event("cache_purge", new Class<?>[] { HTTPMessage.class });
+	public static final Event EVENT_CACHE_HIT = new Event("cache_hit", new Class<?>[] { ProxyHTTPRequest.class, HTTPResponseData.class });
+	public static final Event EVENT_CACHE_MISS = new Event("cache_miss", new Class<?>[] { ProxyHTTPRequest.class });
+	public static final Event EVENT_CACHE_PURGE = new Event("cache_purge", new Class<?>[] { ProxyHTTPRequest.class });
 	public static final Event EVENT_CACHE_STORE = new Event("cache_store", new Class<?>[] { CacheEntry.class });
 
 
-	private final Map<HTTPMessage, PendingCacheEntry> pendingCacheEntries = new HashMap<>();
+	private final Map<HTTPResponse, PendingCacheEntry> pendingCacheEntries = new HashMap<>();
 
 	private CacheConfig cacheConfig;
 	private VHostIntegration pluginVhost;
@@ -97,7 +101,7 @@ public class CachePlugin {
 	}
 
 	@SubscribeEvent
-	public void onHTTPRequestPre(SocketConnection downstreamConnection, HTTPMessage request, UpstreamServer userver) {
+	public void onHTTPRequestPre(SocketConnection downstreamConnection, ProxyHTTPRequest request, UpstreamServer userver) {
 		if(request.getAuthority() == null)
 			return;
 		if(request.getMethod().equals("PURGE")){
@@ -109,33 +113,33 @@ public class CachePlugin {
 			String purgeKey = cco.getPurgeKey();
 			if(purgeKey == null){ // disabled
 				if(!cco.isPropagatePurgeRequest())
-					this.purgeReply(request, HTTPCommon.STATUS_METHOD_NOT_ALLOWED, "disabled", null);
+					this.purgeReply(request, HTTPStatus.STATUS_METHOD_NOT_ALLOWED, "disabled", null);
 			}else if(purgeKey.length() > 0 && !purgeKey.equals(request.getHeader("x-purge-key"))){
-				this.purgeReply(request, HTTPCommon.STATUS_UNAUTHORIZED, "unauthorized", null);
+				this.purgeReply(request, HTTPStatus.STATUS_UNAUTHORIZED, "unauthorized", null);
 			}else{
 				String purgeMethod = request.getHeader("x-purge-method");
 				if(purgeMethod == null)
 					purgeMethod = "GET";
-				String path = request.getOrigPath();
+				String path = request.getInitialPath();
 				if(cco.isWildcardPurgeEnabled() && path.endsWith("**")){
 					String keyPrefix = CachePlugin.getCacheKey(purgeMethod, request.getScheme(), request.getAuthority(), path.substring(0, path.length() - 2));
 					int deleted = this.cache.deleteIfKey((s) -> {
 						return s.startsWith(keyPrefix);
 					});
 					if(deleted < 0){
-						this.purgeReply(request, HTTPCommon.STATUS_NOT_IMPLEMENTED, "unsupported", null);
+						this.purgeReply(request, HTTPStatus.STATUS_NOT_IMPLEMENTED, "unsupported", null);
 					}else{
 						logger.debug("Purged ", deleted, " cache entries (wildcard key: '", keyPrefix, "')");
-						this.purgeReply(request, HTTPCommon.STATUS_OK, "ok", ",\"deleted\":" + deleted);
+						this.purgeReply(request, HTTPStatus.STATUS_OK, "ok", ",\"deleted\":" + deleted);
 					}
 				}else{
 					String key = CachePlugin.getCacheKey(purgeMethod, request.getScheme(), request.getAuthority(), path);
 					CacheEntry entry = this.cache.delete(key);
 					if(entry != null){
 						logger.debug("Purged cache entry '", key, "' (age ", entry.age(), ")");
-						this.purgeReply(request, HTTPCommon.STATUS_OK, "ok", null);
+						this.purgeReply(request, HTTPStatus.STATUS_OK, "ok", null);
 					}else if(!cco.isPropagatePurgeRequest()){
-						this.purgeReply(request, HTTPCommon.STATUS_NOT_FOUND, "nonexistent", null);
+						this.purgeReply(request, HTTPStatus.STATUS_NOT_FOUND, "nonexistent", null);
 					}
 				}
 			}
@@ -148,8 +152,8 @@ public class CachePlugin {
 					Proxy.getInstance().dispatchEvent(EVENT_CACHE_MISS, request);
 					return;
 				}
-				HTTPMessage res = entry.getResponse().clone();
-				res.setVersion(request.getVersion());
+				HTTPResponse res = new HTTPResponse(entry.getResponse());
+				res.setHttpVersion(request.getHttpVersion());
 				entry.incrementHits();
 
 				boolean etagCondition = true;
@@ -176,7 +180,7 @@ public class CachePlugin {
 
 				byte[] data;
 				if(!etagCondition){
-					res.setStatus(HTTPCommon.STATUS_NOT_MODIFIED);
+					res.setStatus(HTTPStatus.STATUS_NOT_MODIFIED);
 					res.deleteHeader("content-length");
 					data = new byte[0];
 				}else{
@@ -184,9 +188,9 @@ public class CachePlugin {
 				}
 
 				this.addHeaders(res, entry, true);
-				HTTPMessageData resdata = new HTTPMessageData(res, data);
+				HTTPResponseData resdata = new HTTPResponseData(res, data);
 				Proxy.getInstance().dispatchEvent(EVENT_CACHE_HIT, request, resdata);
-				request.getEngine().respond(request, resdata);
+				request.respond(resdata);
 			}else{
 				Proxy.getInstance().dispatchEvent(EVENT_CACHE_MISS, request);
 			}
@@ -194,8 +198,8 @@ public class CachePlugin {
 	}
 
 	@SubscribeEvent(priority = Priority.LOWEST) // lowest to allow other plugins to edit the response before caching
-	public void onHTTPResponse(SocketConnection downstreamConnection, SocketConnection upstreamConnection, HTTPMessage response, UpstreamServer upstreamServer) {
-		String key = CachePlugin.getCacheKey(response.getCorrespondingMessage());
+	public void onHTTPResponse(SocketConnection downstreamConnection, SocketConnection upstreamConnection, HTTPResponse response, UpstreamServer upstreamServer) {
+		String key = CachePlugin.getCacheKey(response.getOther());
 		CacheEntry entry = this.cache.fetch(key);
 		// if the entry already exists, it will be replaced if this response finishes
 
@@ -207,8 +211,8 @@ public class CachePlugin {
 	}
 
 	@SubscribeEvent(priority = Priority.LOWEST)
-	public void onHTTPResponseData(SocketConnection downstreamConnection, SocketConnection upstreamConnection, HTTPMessageData responsedata, UpstreamServer upstreamServer) {
-		HTTPMessage response = responsedata.getHttpMessage();
+	public void onHTTPResponseData(SocketConnection downstreamConnection, SocketConnection upstreamConnection, HTTPResponseData responsedata, UpstreamServer upstreamServer) {
+		HTTPResponse response = responsedata.getHttpMessage();
 		synchronized(this.pendingCacheEntries){
 			PendingCacheEntry pce = this.pendingCacheEntries.get(response);
 			if(pce != null){
@@ -221,7 +225,7 @@ public class CachePlugin {
 	}
 
 	@SubscribeEvent(priority = Priority.LOWEST)
-	public void onHTTPResponseEnded(SocketConnection downstreamConnection, SocketConnection upstreamConnection, HTTPMessage response, UpstreamServer upstreamServer) {
+	public void onHTTPResponseEnded(SocketConnection downstreamConnection, SocketConnection upstreamConnection, HTTPResponse response, UpstreamServer upstreamServer) {
 		synchronized(this.pendingCacheEntries){
 			PendingCacheEntry pce = this.pendingCacheEntries.get(response);
 			if(pce != null){
@@ -236,17 +240,17 @@ public class CachePlugin {
 	}
 
 
-	private void purgeReply(HTTPMessage request, int status, String statusmsg, String additional) {
+	private void purgeReply(HTTPRequest request, int status, String statusmsg, String additional) {
 		String resJson = "{\"status\":\"" + statusmsg + "\"";
 		if(this.cacheName != null)
 			resJson += ",\"server\":\"" + this.cacheServedByPrefix + this.cacheName + "\"";
 		if(additional != null)
 			resJson += additional;
 		resJson += "}";
-		request.getEngine().respond(request, status, resJson.getBytes(), "content-type", "application/json");
+		request.respond(status, resJson.getBytes(), "content-type", "application/json");
 	}
 
-	private boolean tryStartCachingResponse(SocketConnection upstreamConnection, HTTPMessage response, UpstreamServer upstreamServer, String key) {
+	private boolean tryStartCachingResponse(SocketConnection upstreamConnection, HTTPResponse response, UpstreamServer upstreamServer, String key) {
 		CacheConfig cc = this.getConfig(upstreamServer);
 		CacheEntry.Properties properties = cc.getResourceProperties(response);
 		if(properties != null){
@@ -287,7 +291,7 @@ public class CachePlugin {
 
 	private void cleanup() {
 		synchronized(this.pendingCacheEntries){
-			Iterator<java.util.Map.Entry<HTTPMessage, PendingCacheEntry>> iterator = this.pendingCacheEntries.entrySet().iterator();
+			Iterator<java.util.Map.Entry<HTTPResponse, PendingCacheEntry>> iterator = this.pendingCacheEntries.entrySet().iterator();
 			while(iterator.hasNext()){
 				PendingCacheEntry entry = iterator.next().getValue();
 				if(!entry.upstreamConnection.isConnected()){
@@ -318,8 +322,8 @@ public class CachePlugin {
 	}
 
 
-	public static String getCacheKey(HTTPMessage request) {
-		return CachePlugin.getCacheKey(request.getMethod(), request.getScheme(), request.getAuthority(), request.getOrigPath());
+	public static String getCacheKey(HTTPRequest request) {
+		return CachePlugin.getCacheKey(request.getMethod(), request.getScheme(), request.getAuthority(), request.getPath());
 	}
 
 	public static String getCacheKey(String method, String scheme, String authority, String path) {
@@ -329,7 +333,7 @@ public class CachePlugin {
 	/**
 	 * Registers a new implementation of {@link ResourceCache}.
 	 * 
-	 * @param name     The name of this implementation used in the configuration file
+	 * @param name The name of this implementation used in the configuration file
 	 * @param supplier Generator for new instances of the cache
 	 * @return <code>true</code> if the implementation was registered successfully, <code>false</code> if an implementation with the given name already exists
 	 */
@@ -344,7 +348,7 @@ public class CachePlugin {
 	 * Registers a new {@link VaryComparator} which is used to check if the values of two headers are semantically equivalent, and a response containing a <b>Vary</b> HTTP
 	 * header may be served for a request when all declared headers are equal or the <code>VaryComparator</code>s return <code>true</code>.
 	 * 
-	 * @param header     The name of the HTTP header whose values this comparator compares
+	 * @param header The name of the HTTP header whose values this comparator compares
 	 * @param comparator The comparator
 	 * @return <code>true</code> if a comparator was previously registered for the given header
 	 */
@@ -395,10 +399,10 @@ public class CachePlugin {
 	private static class PendingCacheEntry {
 
 		private final SocketConnection upstreamConnection;
-		private final HTTPMessage response;
+		private final HTTPResponse response;
 		private final CacheEntry.Properties ceProperties;
 
-		private final HTTPMessage request;
+		private final ProxyHTTPRequest request;
 		private final String key;
 		private final long created = time();
 
@@ -407,25 +411,25 @@ public class CachePlugin {
 		private List<byte[]> data = new LinkedList<>();
 		private int dataLen = 0;
 
-		public PendingCacheEntry(SocketConnection upstreamConnection, HTTPMessage response, CacheEntry.Properties properties) {
+		public PendingCacheEntry(SocketConnection upstreamConnection, HTTPResponse response, CacheEntry.Properties properties) {
 			this.upstreamConnection = upstreamConnection;
-			this.response = response.clone();
+			this.response = new HTTPResponse(response);
 			this.ceProperties = properties;
 
-			HTTPMessage request = this.response.getCorrespondingMessage();
+			ProxyHTTPRequest request = (ProxyHTTPRequest) response.getOther();
 			if(request == null)
 				throw new NullPointerException("request is null");
-			request = request.clone(); // may still be used so clone before editing
-			request.setAuthority(request.getOrigAuthority()); // reset any changes
-			request.setPath(request.getOrigPath());
-			this.request = request;
+			ProxyHTTPRequest prequest = new ProxyHTTPRequest(request); // may still be used so clone before editing
+			prequest.setAuthority(prequest.getInitialAuthority()); // reset any changes
+			prequest.setPath(prequest.getInitialPath());
+			this.request = prequest;
 			this.key = CachePlugin.getCacheKey(this.request);
 
 			this.correctedAgeValue = CachePlugin.parseIntSafe(response.getHeader("age"), 0)
-					+ (int) ((response.getCreatedTime() - response.getCorrespondingMessage().getCreatedTime()) / 1000);
+					+ (int) ((response.getCreatedTime() - response.getOther().getCreatedTime()) / 1000);
 
-			this.response.setCorrespondingMessage(this.request);
-			this.request.setCorrespondingMessage(this.response);
+			this.response.setOther(this.request);
+			this.request.setOther(this.response);
 
 			if(!this.response.headerExists("date"))
 				this.response.setHeader("date", HTTPCommon.dateString());

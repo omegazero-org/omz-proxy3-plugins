@@ -24,9 +24,11 @@ import org.omegazero.common.eventbus.EventBusSubscriber;
 import org.omegazero.common.eventbus.SubscribeEvent;
 import org.omegazero.common.logging.Logger;
 import org.omegazero.common.logging.LoggerUtil;
+import org.omegazero.http.common.HTTPMessage;
+import org.omegazero.http.common.HTTPRequest;
+import org.omegazero.http.common.HTTPResponse;
 import org.omegazero.net.socket.SocketConnection;
 import org.omegazero.proxy.core.Proxy;
-import org.omegazero.proxy.http.HTTPMessage;
 import org.omegazero.proxy.net.UpstreamServer;
 import org.omegazero.proxy.util.ProxyUtil;
 
@@ -57,36 +59,35 @@ public class CustomHeadersPlugin {
 
 
 	@SubscribeEvent
-	public void onHTTPRequest(SocketConnection downstreamConnection, HTTPMessage request, UpstreamServer userver) {
-		this.addHeaders(request, userver, true);
+	public void onHTTPRequest(SocketConnection downstreamConnection, HTTPRequest request, UpstreamServer userver) {
+		this.addHeaders(request, request.getAuthority(), request.getPath(), userver, true);
 	}
 
 	@SubscribeEvent
-	public void onHTTPResponse(SocketConnection downstreamConnection, SocketConnection upstreamConnection, HTTPMessage response, UpstreamServer userver) {
-		this.addHeaders(response, userver, false);
+	public void onHTTPResponse(SocketConnection downstreamConnection, SocketConnection upstreamConnection, HTTPResponse response, UpstreamServer userver) {
+		HTTPRequest request = response.getOther();
+		this.addHeaders(response, request.getAuthority(), request.getPath(), userver, false);
 	}
 
 
-	private synchronized void addHeaders(HTTPMessage msg, UpstreamServer userver, boolean up) {
-		String hostname = msg.isRequest() ? msg.getAuthority() : msg.getCorrespondingMessage().getAuthority();
+	private synchronized void addHeaders(HTTPMessage msg, String hostname, String requestPath, UpstreamServer userver, boolean up) {
 		if(hostname == null)
 			return;
 
 		if(this.pluginVhost != null){
 			List<Header> vhostHeaders = this.pluginVhost.getHostHeaders(userver);
 			if(vhostHeaders != null)
-				this.addHeadersFromList(vhostHeaders, msg, up);
+				this.addHeadersFromList(requestPath, vhostHeaders, msg, up);
 		}
 
 		for(Host h : this.hosts){
 			if(ProxyUtil.hostMatches(h.expr, hostname)){
-				this.addHeadersFromList(h.headers, msg, up);
+				this.addHeadersFromList(requestPath, h.headers, msg, up);
 			}
 		}
 	}
 
-	private void addHeadersFromList(List<Header> headers, HTTPMessage msg, boolean up) {
-		String requestPath = msg.isRequest() ? msg.getPath() : msg.getCorrespondingMessage().getPath();
+	private void addHeadersFromList(String requestPath, List<Header> headers, HTTPMessage msg, boolean up) {
 		for(Header header : headers){
 			if((up && (header.direction & Header.DIRECTION_UP) == 0) || (!up && (header.direction & Header.DIRECTION_DOWN) == 0))
 				continue;
@@ -111,7 +112,7 @@ public class CustomHeadersPlugin {
 				continue;
 
 			if(!up && header.requiredStatus != null){
-				int status = msg.getStatus();
+				int status = ((HTTPResponse) msg).getStatus();
 				boolean rstatus = false;
 				for(int s : header.requiredStatus){
 					if(s == status){

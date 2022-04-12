@@ -21,9 +21,10 @@ import org.omegazero.common.eventbus.SubscribeEvent;
 import org.omegazero.common.eventbus.SubscribeEvent.Priority;
 import org.omegazero.common.logging.Logger;
 import org.omegazero.common.logging.LoggerUtil;
+import org.omegazero.http.common.HTTPResponse;
+import org.omegazero.http.common.HTTPResponseData;
 import org.omegazero.net.socket.SocketConnection;
-import org.omegazero.proxy.http.HTTPMessage;
-import org.omegazero.proxy.http.HTTPMessageData;
+import org.omegazero.proxy.http.ProxyHTTPRequest;
 import org.omegazero.proxy.net.UpstreamServer;
 import org.omegazero.proxy.util.ProxyUtil;
 import org.omegazero.proxyplugin.mirror.transformer.AuthorityTransformer;
@@ -73,8 +74,8 @@ public class MirrorPlugin {
 
 
 	@SubscribeEvent(priority = Priority.HIGH)
-	public void onHTTPResponse(SocketConnection downstreamConnection, SocketConnection upstreamConnection, HTTPMessage response, UpstreamServer upstreamServer) {
-		String reqHostname = response.getCorrespondingMessage().getOrigAuthority();
+	public void onHTTPResponse(SocketConnection downstreamConnection, SocketConnection upstreamConnection, HTTPResponse response, UpstreamServer upstreamServer) {
+		String reqHostname = ((ProxyHTTPRequest) response.getOther()).getInitialAuthority();
 		if(reqHostname == null)
 			return;
 		Transformer transformer = null;
@@ -93,19 +94,19 @@ public class MirrorPlugin {
 	}
 
 	@SubscribeEvent(priority = Priority.HIGH)
-	public void onHTTPResponseData(SocketConnection downstreamConnection, SocketConnection upstreamConnection, HTTPMessageData responsedata, UpstreamServer upstreamServer) {
+	public void onHTTPResponseData(SocketConnection downstreamConnection, SocketConnection upstreamConnection, HTTPResponseData responsedata, UpstreamServer upstreamServer) {
 		responsedata.setData(this.processDataChunk(responsedata.getHttpMessage(), responsedata.getData()));
 	}
 
 
-	private byte[] processDataChunk(HTTPMessage response, byte[] data) {
+	private byte[] processDataChunk(HTTPResponse response, byte[] data) {
 		Transformer transformer = (Transformer) response.getAttachment("mirror_transformer");
 		if(transformer == null)
 			return data;
 		return this.transform(transformer, data, response);
 	}
 
-	private byte[] transform(Transformer transformer, byte[] data, HTTPMessage msg) {
+	private byte[] transform(Transformer transformer, byte[] data, HTTPResponse msg) {
 		String ctype = msg.getHeader("content-type");
 		if(ctype == null)
 			return data;
@@ -113,7 +114,7 @@ public class MirrorPlugin {
 		if(ctypeEnd > 0)
 			ctype = ctype.substring(0, ctypeEnd);
 		long start = System.nanoTime();
-		byte[] n = transformer.transform(msg.getCorrespondingMessage(), ctype, data);
+		byte[] n = transformer.transform((ProxyHTTPRequest) msg.getOther(), ctype, data);
 		if(n != null){
 			long time = System.nanoTime() - start;
 			if(logger.debug())

@@ -27,8 +27,9 @@ import org.omegazero.common.eventbus.SubscribeEvent;
 import org.omegazero.common.eventbus.SubscribeEvent.Priority;
 import org.omegazero.common.logging.Logger;
 import org.omegazero.common.logging.LoggerUtil;
+import org.omegazero.http.util.HTTPStatus;
 import org.omegazero.net.socket.SocketConnection;
-import org.omegazero.proxy.http.HTTPMessage;
+import org.omegazero.proxy.http.ProxyHTTPRequest;
 import org.omegazero.proxy.net.UpstreamServer;
 
 @EventBusSubscriber
@@ -212,18 +213,18 @@ public class VirtualHostPlugin {
 	}
 
 	@SubscribeEvent(priority = Priority.HIGHEST)
-	public void onHTTPRequestPre(SocketConnection downstreamConnection, HTTPMessage request, UpstreamServer userver) {
+	public void onHTTPRequestPre(SocketConnection downstreamConnection, ProxyHTTPRequest request, UpstreamServer userver) {
 		if(userver instanceof VirtualHost){
 			VirtualHost vhost = (VirtualHost) userver;
 			if(request.getScheme().equals("http") && vhost.isRedirectInsecure()){
 				logger.debug("Redirecting HTTP to HTTPS");
-				request.getEngine().respond(request, 307, new byte[0], "Location", "https://" + request.getOrigAuthority() + request.getOrigPath());
+				request.respond(HTTPStatus.STATUS_TEMPORARY_REDIRECT, new byte[0], "Location", "https://" + request.getInitialAuthority() + request.getInitialPath());
 			}
 		}
 	}
 
 	@SubscribeEvent
-	public void onHTTPRequest(SocketConnection downstreamConnection, HTTPMessage request, UpstreamServer userver) {
+	public void onHTTPRequest(SocketConnection downstreamConnection, ProxyHTTPRequest request, UpstreamServer userver) {
 		if(userver instanceof VirtualHost){
 			VirtualHost vhost = (VirtualHost) userver;
 			if(!vhost.isPreservePath()){
@@ -239,7 +240,8 @@ public class VirtualHostPlugin {
 				request.setAuthority(vhost.getHostOverride());
 			}
 		}else{
-			logger.debug("Request ", request.getRequestId(), " does not have an upstream server of type VirtualHost");
+			if(logger.debug())
+				logger.debug("Request ", request.getRequestId(), " does not have an upstream server of type VirtualHost");
 		}
 	}
 

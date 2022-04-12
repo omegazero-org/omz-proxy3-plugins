@@ -20,7 +20,8 @@ import org.omegazero.common.eventbus.SubscribeEvent;
 import org.omegazero.common.logging.Logger;
 import org.omegazero.common.logging.LoggerUtil;
 import org.omegazero.net.socket.SocketConnection;
-import org.omegazero.proxy.http.HTTPMessage;
+import org.omegazero.proxy.http.ProxyHTTPRequest;
+import org.omegazero.proxy.http.ProxyHTTPResponse;
 import org.omegazero.proxy.net.UpstreamServer;
 
 @EventBusSubscriber
@@ -47,8 +48,8 @@ public class ServerTimingPlugin {
 
 
 	@SubscribeEvent
-	public void onHTTPResponse(SocketConnection downstreamConnection, SocketConnection upstreamConnection, HTTPMessage response, UpstreamServer upstreamServer) {
-		long time = response.getCreatedTime() - response.getCorrespondingMessage().getCreatedTime();
+	public void onHTTPResponse(SocketConnection downstreamConnection, SocketConnection upstreamConnection, ProxyHTTPResponse response, UpstreamServer upstreamServer) {
+		long time = response.getCreatedTime() - response.getOther().getCreatedTime();
 		String value = response.getHeader("server-timing");
 		float ut = 0;
 		if(value != null && this.subtractOriginTiming){
@@ -64,7 +65,7 @@ public class ServerTimingPlugin {
 			if(ut < time)
 				time -= ut;
 		}
-		logger.trace("Response to ", response.getCorrespondingMessage().getRequestId(), " took ", time, "ms (+", ut, "ms)");
+		logger.trace("Response to ", ((ProxyHTTPRequest) response.getOther()).getRequestId(), " took ", time, "ms (+", ut, "ms)");
 		String nvalue = this.headerVal + time;
 		if(value != null){
 			if(this.addStart)

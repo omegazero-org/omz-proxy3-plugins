@@ -22,7 +22,7 @@ import org.omegazero.common.eventbus.SubscribeEvent.Priority;
 import org.omegazero.common.logging.Logger;
 import org.omegazero.common.logging.LoggerUtil;
 import org.omegazero.net.socket.SocketConnection;
-import org.omegazero.proxy.http.HTTPMessage;
+import org.omegazero.proxy.http.ProxyHTTPRequest;
 import org.omegazero.proxy.net.UpstreamServer;
 import org.omegazero.proxy.util.ProxyUtil;
 
@@ -48,10 +48,10 @@ public class RedirectInsecurePlugin {
 
 
 	@SubscribeEvent(priority = Priority.HIGHEST)
-	public synchronized void onHTTPRequestPre(SocketConnection downstreamConnection, HTTPMessage request, UpstreamServer userver) {
+	public synchronized void onHTTPRequestPre(SocketConnection downstreamConnection, ProxyHTTPRequest request, UpstreamServer userver) {
 		if(!request.getScheme().equals("http"))
 			return;
-		String requestHostname = request.getAuthority();
+		String requestHostname = request.getInitialAuthority();
 		if(requestHostname == null)
 			return;
 		boolean redirect = false;
@@ -63,7 +63,7 @@ public class RedirectInsecurePlugin {
 		}
 		if(redirect){
 			logger.info("Redirecting HTTP to HTTPS");
-			request.getEngine().respond(request, 307, new byte[0], "Location", "https://" + requestHostname + request.getOrigPath());
+			request.respond(307, new byte[0], "Location", "https://" + requestHostname + request.getInitialPath());
 		}
 	}
 }

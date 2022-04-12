@@ -13,12 +13,14 @@ package org.omegazero.proxyaccelerator.cache;
 
 import java.util.Map;
 
-import org.omegazero.proxy.http.HTTPMessage;
+import org.omegazero.http.common.HTTPMessage;
+import org.omegazero.http.common.HTTPRequest;
+import org.omegazero.http.common.HTTPResponse;
 
 public class CacheEntry {
 
-	private final HTTPMessage request;
-	private final HTTPMessage response;
+	private final HTTPRequest request;
+	private final HTTPResponse response;
 	private final byte[] responseData;
 	private final long expiresAt;
 	private final int correctedAgeValue;
@@ -28,7 +30,7 @@ public class CacheEntry {
 
 	private int hits;
 
-	public CacheEntry(HTTPMessage request, HTTPMessage response, byte[] responseData, long expiresAt, int correctedAgeValue, Properties properties) {
+	public CacheEntry(HTTPRequest request, HTTPResponse response, byte[] responseData, long expiresAt, int correctedAgeValue, Properties properties) {
 		this.request = request;
 		this.response = response;
 		this.responseData = responseData;
@@ -46,7 +48,7 @@ public class CacheEntry {
 	 * @param request The request to check the Vary header values of the request of this cached response against
 	 * @return <code>true</code> if the Vary request headers match in both requests or the Vary header in the response was empty or nonexistent
 	 */
-	public boolean isVaryMatching(HTTPMessage request) {
+	public boolean isVaryMatching(HTTPRequest request) {
 		return this.properties.isVaryMatching(request);
 	}
 
@@ -59,7 +61,7 @@ public class CacheEntry {
 	 * @return <code>true</code> if this entry is suitable to be used as a response to the given <b>request</b>
 	 * @see #isVaryMatching(HTTPMessage)
 	 */
-	public boolean isUsableFor(HTTPMessage request) {
+	public boolean isUsableFor(HTTPRequest request) {
 		return !this.isStale() && this.isVaryMatching(request);
 	}
 
@@ -85,7 +87,7 @@ public class CacheEntry {
 	 * @return A rough estimation of the amount of memory this cache entry uses in bytes
 	 */
 	public long getSize() {
-		return this.request.getSize() + this.response.getSize() + this.responseData.length + this.properties.getVaryValuesSize() * 128 + 48;
+		return 8192 + this.responseData.length + this.properties.getVaryValuesSize() * 128 + 48;
 	}
 
 	/**
@@ -106,7 +108,11 @@ public class CacheEntry {
 	}
 
 
-	public HTTPMessage getResponse() {
+	public HTTPRequest getRequest() {
+		return this.request;
+	}
+
+	public HTTPResponse getResponse() {
 		return this.response;
 	}
 
