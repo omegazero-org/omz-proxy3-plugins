@@ -11,8 +11,8 @@ Configuration ID: `mirror`
 
 | Name | Type | Description | Required | Default value |
 | --- | --- | --- | --- | --- |
-| maxChunkSize | number | The maximum response body chunk size this plugin is willing to process, if the response body is chunked. Chunks which are larger than this maximum will cause an error to be thrown. If no transformations are being applied to the response, this value has no effect. | no | 0x1000000 `(16 MiB)` |
-| transformers | array(object) | The transformations to apply to a response body. See below. | no | `empty` |
+| maxChunkSize | number | The maximum response body chunk size this plugin is willing to process, if the response body is chunked. Chunks which are larger than this maximum will cause an error to be thrown. If no transformations are being applied to the response, this value has no effect. | no | `0x1000000` (16 MiB) |
+| transformers | array(object) | The transformations to apply to a response body. See below. | no | (empty) |
 
 ### Transformers
 
@@ -20,10 +20,10 @@ To actually edit the response body, the `transformers` array must contain one or
 
 | Name | Type | Description | Required | Default value |
 | --- | --- | --- | --- | --- |
-| type | string | The type of transformation to apply. See below. | yes | `-` |
-| hostname | string / array(string) | The wildcard resource hostname(s) for which this transformation should be applied to responses. | yes | `-` |
-| replacements | object | Object of string key-value pairs. The hostname in the key is replaced by the hostname in the value for links that are edited. | yes | `-` |
-| toHttp | boolean | Whether links that originally had the `https` URL scheme should be edited to have the `http` URL scheme instead. | no | false |
+| type | string | The type of transformation to apply. See below. | yes | - |
+| hostname | string / array(string) | The wildcard resource hostname(s) for which this transformation should be applied to responses. | yes | - |
+| replacements | object | Object of string key-value pairs. The hostname in the key is replaced by the hostname in the value for links that are edited. | yes | - |
+| toHttp | boolean | Whether links that originally had the `https` URL scheme should be edited to have the `http` URL scheme instead. | no | `false` |
 
 ### Transformer Types
 

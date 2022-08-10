@@ -11,15 +11,15 @@ The plugin configuration object consists of any number of arrays, where the key 
 
 | Name | Type | Description | Required | Default value |
 | --- | --- | --- | --- | --- |
-| direction | string | The direction of this header configuration. Either "request", "response" or "both" to include this header only in requests, responses, or both, respectively. | yes | `-` |
-| mode | string | When to apply this header configuration. See below. | no | "keep" |
-| key | string | The HTTP header name. Case-insensitive. | yes | `-` |
-| value | string | The HTTP header value. | yes | `-` |
-| separator | string | The separator for mode types "prepend" or "append". | ~ | `-` |
-| requestPath | regex | If configured, the header will only be applied if the request path matches this regular expression (also applicable for response messages). This behavior may be inverted by prepending a single `!`. | no | null |
-| requiredStatus | number / array(number) | If not `null`, this header object will only be applied when the response status code is or is not in this list of status codes, depending on the value of `requiredStatusWhitelist`. This property has no effect for requests. | no | null |
-| requiredStatusWhitelist | boolean | If `true`, the response status code must be one of the status codes in `requiredStatus`; otherwise, the behavior is inverted. This property has no effect if `requiredStatus` is `null`. | no | true |
-| requiredHeaders | object | Key-value pairs that are required for this header to be added. The key is a string, value is a regex. The value may be `null` to specify that the header must not be present. | no | `empty` |
+| direction | string | The direction of this header configuration. Either "request", "response" or "both" to include this header only in requests, responses, or both, respectively. | yes | - |
+| mode | string | When to apply this header configuration. See below. | no | `"keep"` |
+| key | string | The HTTP header name. Case-insensitive. | yes | - |
+| value | string | The HTTP header value. | yes | - |
+| separator | string | The separator for mode types "prepend" or "append". | ~ | - |
+| requestPath | regex | If configured, the header will only be applied if the request path matches this regular expression (also applicable for response messages). This behavior may be inverted by prepending a single `!`. | no | `null` |
+| requiredStatus | number / array(number) | If not `null`, this header object will only be applied when the response status code is or is not in this list of status codes, depending on the value of `requiredStatusWhitelist`. This property has no effect for requests. | no | `null` |
+| requiredStatusWhitelist | boolean | If `true`, the response status code must be one of the status codes in `requiredStatus`; otherwise, the behavior is inverted. This property has no effect if `requiredStatus` is `null`. | no | `true` |
+| requiredHeaders | object | Key-value pairs that are required for this header to be added. The key is a string, value is a regex. The value may be `null` to specify that the header must not be present. | no | (empty) |
 
 ### Mode values
 

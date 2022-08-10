@@ -13,19 +13,19 @@ The required array named `hosts` is a property in the plugin configuration objec
 
 | Name | Type | Description | Required | Default value |
 | --- | --- | --- | --- | --- |
-| hostname | string / array(string) | The wildcard hostname(s) of this virtual host. This string may also contain a trailing path component, which will override the path configured below (e.g. "example.com/path/"). | yes | `-` |
-| path | string | Path base of this virtual host. The path is matched when the path in the HTTP request starts with this value. Must start with `/`. | no | / |
-| address | string | The address of the origin server. | yes | `-` |
-| addressTTL | number | See `upstreamServerAddressTTL` in the omz-proxy3 base configuration. | no | -1 |
-| portPlain | number | The port where the origin server is listening for plaintext HTTP requests. May be negative, in which case all requests will be forwarded to the HTTPS port below. | no | 80 |
-| portTLS | number | The port where the origin server is listening for HTTPS requests. May be negative, in which case all requests will be forwarded to the plaintext HTTP port above. At least one of both ports must be given. | no | 443 |
-| protocols | array(string) | A list of protocol names that the upstream server supports. Similar to `upstreamServerProtocols` in the omz-proxy3 base configuration. | no | ["http/1.1"] |
-| prependPath | string | An optional path string to prepend to the requested path before forwarding the request. | no | null |
-| preservePath | boolean | Whether the original request path should be preserved when the `path` of this virtual host is not only `/`. Otherwise, the value of the `path` property will be cut off from the path in the request. | no | false |
-| portWildcard | boolean | Whether a port number in the request authority parameter should be ignored. | no | false |
-| redirectInsecure | boolean | Whether plaintext HTTP requests should be redirected to HTTPS on this virtual host. | no | false |
-| hostOverride | string | If not `null`, the value of the `Host` header (or equivalent) will be replaced by the specified value before a request is forwarded. | no | null |
-| template | string | The name of the template to use. See below. | no | null |
+| hostname | string / array(string) | The wildcard hostname(s) of this virtual host. This string may also contain a trailing path component, which will override the path configured below (e.g. "example.com/path/"). | yes | - |
+| path | string | Path base of this virtual host. The path is matched when the path in the HTTP request starts with this value. Must start with `/`. | no | `/` |
+| address | string | The address of the origin server. | yes | - |
+| addressTTL | number | See `upstreamServerAddressTTL` in the omz-proxy3 base configuration. | no | `-1` |
+| portPlain | number | The port where the origin server is listening for plaintext HTTP requests. May be negative, in which case all requests will be forwarded to the HTTPS port below. | no | `80` |
+| portTLS | number | The port where the origin server is listening for HTTPS requests. May be negative, in which case all requests will be forwarded to the plaintext HTTP port above. At least one of both ports must be given. | no | `443` |
+| protocols | array(string) | A list of protocol names that the upstream server supports. Similar to `upstreamServerProtocols` in the omz-proxy3 base configuration. | no | `["http/1.1"]` |
+| prependPath | string | An optional path string to prepend to the requested path before forwarding the request. | no | `null` |
+| preservePath | boolean | Whether the original request path should be preserved when the `path` of this virtual host is not only `/`. Otherwise, the value of the `path` property will be cut off from the path in the request. | no | `false` |
+| portWildcard | boolean | Whether a port number in the request authority parameter should be ignored. | no | `false` |
+| redirectInsecure | boolean | Whether plaintext HTTP requests should be redirected to HTTPS on this virtual host. | no | `false` |
+| hostOverride | string | If not `null`, the value of the `Host` header (or equivalent) will be replaced by the specified value before a request is forwarded. | no | `null` |
+| template | string | The name of the template to use. See below. | no | `null` |
 
 ### Templates
 

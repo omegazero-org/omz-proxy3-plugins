@@ -13,11 +13,11 @@ Global variables are set directly in the plugin configuration object.
 
 | Name | Type | Description | Required | Default value |
 | --- | --- | --- | --- | --- |
-| name | string | The name of this cache advertised in the `X-Served-By` HTTP header. The header is disabled if this value is `null`. | no | null |
-| appendCacheName | boolean | Whether to append the cache name to the proxy name. This property only has an effect during initialization. | no | false |
-| servedByPrefix | string | The prefix to prepend to `name` in the `X-Served-By` HTTP header. | no | "cache-" |
-| type | string | The cache implementation to use. Currently, there are two builtin cache implementations: "lru" is a size-limited [LRU](https://en.wikipedia.org/wiki/Cache_replacement_policies#Least_recently_used_(LRU))-cache; "softreference" is a cache based on [SoftReference](https://docs.oracle.com/javase/8/docs/api/java/lang/ref/SoftReference.html)s, meaning the cache may use all available memory but entries are automatically deleted when there is memory pressure. | no | "lru" |
-| sizeLimit | number | The maximum amount of memory the cache may use for resources in bytes. Note that this value is only a recommendation: the cache may also use more or less memory than the value specified or may ignore this value entirely. | no | `half of available memory` |
+| name | string | The name of this cache advertised in the `X-Served-By` HTTP header. The header is disabled if this value is `null`. | no | `null` |
+| appendCacheName | boolean | Whether to append the cache name to the proxy name. This property only has an effect during initialization. | no | `false` |
+| servedByPrefix | string | The prefix to prepend to `name` in the `X-Served-By` HTTP header. | no | `"cache-"` |
+| type | string | The cache implementation to use. Currently, there are two builtin cache implementations: "lru" is a size-limited [LRU](https://en.wikipedia.org/wiki/Cache_replacement_policies#Least_recently_used_(LRU))-cache; "softreference" is a cache based on [SoftReference](https://docs.oracle.com/javase/8/docs/api/java/lang/ref/SoftReference.html)s, meaning the cache may use all available memory but entries are automatically deleted when there is memory pressure. | no | `"lru"` |
+| sizeLimit | number | The maximum amount of memory the cache may use for resources in bytes. Note that this value is only a recommendation: the cache may also use more or less memory than the value specified or may ignore this value entirely. | no | half of available memory |
 
 ### Cache configuration
 
@@ -25,17 +25,17 @@ The default configuration for all paths is in the plugin configuration object di
 
 | Name | Type | Description | Required | Default value |
 | --- | --- | --- | --- | --- |
-| enable | boolean | Whether to enable this cache configuration. | no | true |
-| defaultMaxAge | number | The max age (in seconds) of a resource if the origin server did not send a `Cache-Control` header. | no | 0 |
-| maxAgeOverride | number | Override the `max-age` value sent by the origin server. Disabled if `-1`. | no | -1 |
-| maxAgeOverrideCacheableOnly | boolean | Only override the `max-age` value sent by the origin server to the value set in `maxAgeOverride` if the origin server advertised the resource as cacheable. | no | false |
-| ignoreClientRefresh | boolean | Ignore any `Cache-Control` header sent by the client, and always serve resources from the cache if available. | no | false |
-| ignoreClientRefreshIfImmutable | boolean | Applies the effect as if `ignoreClientRefresh` was set to `true` only if the response `Cache-Control` header contains the directives `immutable` or `s-immutable`. `s-immutable` has the same effect as `immutable` on shared caches, but is ignored by private caches. | no | false |
-| maxResourceSize | number | The maximum resource size that will be attempted to be cached. | no | 0x100000 `(1 MiB)` |
-| purgeKey | string | The required header value of the request header `X-Purge-Key` when requesting a resource to be purged using the PURGE method. If `null`, purging will be disabled; if an empty string, the header is not required and any client may purge resources from the cache. | no | null |
-| propagatePurgeRequest | boolean | Whether to forward a PURGE request to the origin server if purging is disabled or the requested resource does not exist. | no | false |
-| wildcardPurgeEnabled | boolean | Enables bulk resource purging using wildcards. | no | false |
-| overrides | array(object) | Array of objects to override the default cache behavior on a specific path and hostname. The objects in this array have the same properties as this object, with some additional properties (see below). | no | `empty` |
+| enable | boolean | Whether to enable this cache configuration. | no | `true` |
+| defaultMaxAge | number | The max age (in seconds) of a resource if the origin server did not send a `Cache-Control` header. | no | `0` |
+| maxAgeOverride | number | Override the `max-age` value sent by the origin server. Disabled if `-1`. | no | `-1` |
+| maxAgeOverrideCacheableOnly | boolean | Only override the `max-age` value sent by the origin server to the value set in `maxAgeOverride` if the origin server advertised the resource as cacheable. | no | `false` |
+| ignoreClientRefresh | boolean | Ignore any `Cache-Control` header sent by the client, and always serve resources from the cache if available. | no | `false` |
+| ignoreClientRefreshIfImmutable | boolean | Applies the effect as if `ignoreClientRefresh` was set to `true` only if the response `Cache-Control` header contains the directives `immutable` or `s-immutable`. `s-immutable` has the same effect as `immutable` on shared caches, but is ignored by private caches. | no | `false` |
+| maxResourceSize | number | The maximum resource size that will be attempted to be cached. | no | `0x100000` (1 MiB) |
+| purgeKey | string | The required header value of the request header `X-Purge-Key` when requesting a resource to be purged using the PURGE method. If `null`, purging will be disabled; if an empty string, the header is not required and any client may purge resources from the cache. | no | `null` |
+| propagatePurgeRequest | boolean | Whether to forward a PURGE request to the origin server if purging is disabled or the requested resource does not exist. | no | `false` |
+| wildcardPurgeEnabled | boolean | Enables bulk resource purging using wildcards. | no | `false` |
+| overrides | array(object) | Array of objects to override the default cache behavior on a specific path and hostname. The objects in this array have the same properties as this object, with some additional properties (see below). | no | (empty) |
 
 #### Path-specific configuration
 
@@ -43,9 +43,9 @@ Additional properties for objects specified in the above `overrides` array.
 
 | Name | Type | Description | Required | Default value |
 | --- | --- | --- | --- | --- |
-| inherit | boolean | Inherit properties that are not set in this configuration object from the parent object. | no | true |
-| hostname | regex | The hostname to apply this configuration to. | no | .* |
-| path | regex / array(regex) | The path(s) to apply this configuration to. | yes | `-` |
+| inherit | boolean | Inherit properties that are not set in this configuration object from the parent object. | no | `true` |
+| hostname | regex | The hostname to apply this configuration to. | no | `.*` |
+| path | regex / array(regex) | The path(s) to apply this configuration to. | yes | - |
 
 ### Example
 
