@@ -33,9 +33,6 @@ public class XForwardedForPlugin {
 
 	private static final Logger logger = LoggerUtil.createLogger();
 
-	private static final Pattern IPV4_REGEX = Pattern.compile("([0-9]{1,3}\\.){3}[0-9]{1,3}(:[0-9]{1,5})?");
-	private static final Pattern IPV6_REGEX = Pattern.compile("\\[[0-9a-zA-Z]*:[0-9a-zA-Z:]+\\](:[0-9]{1,5})?");
-
 	private static final String HEADER_XFF = "x-forwarded-for";
 	private static final String HEADER_XFP = "x-forwarded-proto";
 
@@ -117,7 +114,7 @@ public class XForwardedForPlugin {
 		String xff = http.getHeader(HEADER_XFF);
 		if(xff == null){
 			if(this.requireHeader){
-				logger.warn("Rejecting request without X-Forwarded-For header from ", downstreamConnection.getRemoteAddress());
+				logger.debug("Rejecting request without X-Forwarded-For header from ", downstreamConnection.getRemoteAddress());
 				http.respondError(HTTPStatus.STATUS_FORBIDDEN, "Rejected by XFF settings");
 			}
 			return;
@@ -136,10 +133,10 @@ public class XForwardedForPlugin {
 		}
 		if(!allowedClient){
 			if(this.enforceAllowedClients){
-				logger.warn("Rejecting request with X-Forwarded-For header from disallowed client ", downstreamConnection.getRemoteAddress());
+				logger.debug("Rejecting request with X-Forwarded-For header from disallowed client ", downstreamConnection.getRemoteAddress());
 				http.respondError(HTTPStatus.STATUS_FORBIDDEN, "Rejected by XFF settings");
 			}else
-				logger.warn("Ignoring X-Forwarded-For header in request from disallowed client ", downstreamConnection.getRemoteAddress());
+				logger.debug("Ignoring X-Forwarded-For header in request from disallowed client ", downstreamConnection.getRemoteAddress());
 			return;
 		}
 
@@ -148,35 +145,19 @@ public class XForwardedForPlugin {
 			xffParts[i] = xffParts[i].trim();
 		if(this.isAllowed(xffParts)){
 			if(xffParts.length > 0){
-				String part = xffParts[0];
-				String address;
-				int portIndex;
-				if(IPV4_REGEX.matcher(part).matches()){
-					portIndex = part.indexOf(':');
-				}else if(IPV6_REGEX.matcher(part).matches()){
-					portIndex = part.indexOf(':', part.indexOf(']'));
-				}else
-					return;
-				int port = 0;
-				if(portIndex > 0){
-					address = part.substring(0, portIndex);
-					port = Integer.parseInt(part.substring(portIndex + 1));
-				}else{
-					address = part;
-				}
-				try{
-					InetSocketAddress newaddr = new InetSocketAddress(InetAddress.getByName(address), port);
+				String addr = xffParts[0];
+				InetSocketAddress newaddr = parseIPAddress(addr);
+				if(newaddr != null){
 					logger.debug(downstreamConnection.getRemoteAddress(), " is now ", newaddr);
 					downstreamConnection.setApparentRemoteAddress(newaddr);
-				}catch(UnknownHostException e){
-					logger.warn("Invalid IP address '", address, "': ", e.toString());
-				}
+				}else
+					logger.debug("Invalid IP address '", addr, "'");
 			}
 		}else if(this.enforceExpectedParts){
-			logger.warn("Rejecting request with disallowed X-Forwarded-For header from ", downstreamConnection.getRemoteAddress());
+			logger.debug("Rejecting request with disallowed X-Forwarded-For header from ", downstreamConnection.getRemoteAddress());
 			http.respondError(HTTPStatus.STATUS_FORBIDDEN, "Rejected by XFF settings");
 		}else{
-			logger.warn("Ignoring disallowed X-Forwarded-For header from ", downstreamConnection.getRemoteAddress());
+			logger.debug("Ignoring disallowed X-Forwarded-For header from ", downstreamConnection.getRemoteAddress());
 		}
 	}
 
@@ -217,19 +198,114 @@ public class XForwardedForPlugin {
 		if(data.length == 4){
 			return (data[0] & 0xff) + "." + (data[1] & 0xff) + "." + (data[2] & 0xff) + "." + (data[3] & 0xff) + (includePort ? (":" + address.getPort()) : "");
 		}else if(data.length == 16){
-			StringBuilder sb = new StringBuilder(39);
-			sb.append('[');
+			StringBuilder sb = new StringBuilder(50);
+			if(includePort)
+				sb.append('[');
 			for(int i = 0; i < 8; i++){
 				if(i > 0){
 					sb.append(':');
 				}
 				sb.append(Integer.toHexString(((data[i << 1] << 8) & 0xff00) | (data[(i << 1) + 1] & 0xff)));
 			}
-			sb.append(']');
 			if(includePort)
-				sb.append(':').append(address.getPort());
+				sb.append("]:").append(address.getPort());
 			return sb.toString();
 		}else
 			throw new IllegalArgumentException("Unexpected address length " + data.length);
+	}
+
+	private static InetSocketAddress parseIPAddress(String addr){
+		if(addr.length() > 50)
+			return null;
+		byte[] address;
+		int port;
+		if(addr.indexOf('.') > 0){
+			int psi = addr.indexOf(':');
+			if(psi > 0){
+				try{
+					port = Integer.parseInt(addr.substring(psi + 1));
+					addr = addr.substring(0, psi);
+				}catch(NumberFormatException e){
+					return null;
+				}
+			}else
+				port = 0;
+			String[] parts = addr.split("\\.");
+			if(parts.length != 4)
+				return null;
+			address = new byte[4];
+			try{
+				for(int i = 0; i < 4; i++){
+					int num = Integer.parseInt(parts[i]);
+					if(num < 0 || num > 255)
+						return null;
+					address[i] = (byte) num;
+				}
+			}catch(NumberFormatException e){
+				return null;
+			}
+		}else{
+			if(addr.startsWith("[")){
+				int ei = addr.indexOf(']');
+				if(ei <= 2)
+					return null;
+				if(addr.length() > ei + 2 && addr.charAt(ei + 1) == ':'){
+					try{
+						port = Integer.parseInt(addr.substring(ei + 2));
+					}catch(NumberFormatException e){
+						return null;
+					}
+				}else
+					port = 0;
+				address = tryParseIPv6Bytes(addr.substring(1, ei));
+			}else{
+				address = tryParseIPv6Bytes(addr);
+				port = 0;
+			}
+			if(address == null)
+				return null;
+		}
+		try{
+			return new InetSocketAddress(InetAddress.getByAddress(address), port);
+		}catch(UnknownHostException e){
+			return null;
+		}
+	}
+
+	private static byte[] tryParseIPv6Bytes(String str){
+		if(str.equals("::"))
+			return new byte[16];
+		String[] parts = str.split(":");
+		if(parts.length < 2 || parts.length > 8)
+			return null;
+		byte[] address = new byte[16];
+		int pi = 0;
+		for(int i = 0; i < 8; i++){
+			if(pi >= parts.length)
+				return null;
+			String p = parts[pi++];
+			if(p.isEmpty()){
+				if(i == 0 || i == 7){
+					p = "0";
+				}else if(pi - 1 == i){
+					i += (8 - parts.length);
+					continue;
+				}else
+					return null;
+			}
+			int num;
+			try{
+				num = Integer.parseInt(p, 16);
+			}catch(NumberFormatException e){
+				return null;
+			}
+			if(num < 0 || num > 0xffff)
+				return null;
+			address[i * 2] = (byte) (num >>> 8);
+			address[i * 2 + 1] = (byte) (num);
+		}
+		if(pi != parts.length)
+			return null;
+		return address;
 	}
 }
