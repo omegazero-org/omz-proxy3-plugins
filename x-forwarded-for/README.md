@@ -1,6 +1,6 @@
 # x-forwarded-for
 
-Adds support to parse and add the `X-Forwarded-For` (XFF) header in requests.
+Adds support to parse and add the `X-Forwarded-For` (XFF) and `X-Forwarded-Proto` (XFP) headers in requests.
 
 
 ## Configuration
@@ -17,6 +17,6 @@ Configuration ID: `xforwardedfor`
 | includePortNumber | boolean | Whether to include the port number when adding the XFF header to forwarded requests. | no | `false` |
 | enableDownstream | boolean | Enable parsing of XFF headers in requests. Note that any existing XFF header values will still be forwarded if this is `false`. | no | `true` |
 | enableUpstream | boolean | Enable adding XFF headers or header values in forwarded requests. Note that any existing XFF header values will still be forwarded if this is `false`. | no | `true` |
-| forwardHeader | boolean | Enable forwarding an existing XFF header value in a request. | no | `true` |
-
+| forwardHeader | boolean | Enable forwarding an existing XFF and XFP header value in a request. | no | `true` |
+| enableForwardProto | boolean | Enable adding a XFP header in forwarded requests. | no | `true` |
 
