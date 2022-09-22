@@ -17,7 +17,6 @@ import java.util.function.Function;
 import java.util.regex.Pattern;
 
 import org.omegazero.proxy.http.ProxyHTTPRequest;
-import org.omegazero.proxyplugin.mirror.transformer.HTMLTransformerReader;
 
 public abstract class Transformer {
 
@@ -46,15 +45,20 @@ public abstract class Transformer {
 	}
 
 
-	public static synchronized boolean registerTransformerReader(TransformerReader reader) {
-		if(Transformer.readers.containsKey(reader.getMimeType()))
+	public static boolean registerTransformerReader(TransformerReader reader) {
+		return registerTransformerReader(reader.getMimeType(), reader);
+	}
+
+	public static synchronized boolean registerTransformerReader(String mimeType, TransformerReader reader) {
+		if(Transformer.readers.containsKey(mimeType))
 			return false;
-		Transformer.readers.put(reader.getMimeType(), reader);
+		Transformer.readers.put(mimeType, reader);
 		return true;
 	}
 
 
 	static{
-		Transformer.registerTransformerReader(new HTMLTransformerReader());
+		Transformer.registerTransformerReader(new org.omegazero.proxyplugin.mirror.transformer.HTMLTransformerReader());
+		Transformer.registerTransformerReader(new org.omegazero.proxyplugin.mirror.transformer.CSSTransformerReader());
 	}
 }
