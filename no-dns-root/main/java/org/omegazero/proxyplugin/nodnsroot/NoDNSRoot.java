@@ -7,6 +7,7 @@
 package org.omegazero.proxyplugin.nodnsroot;
 
 import org.omegazero.common.config.ConfigObject;
+import org.omegazero.common.config.ConfigurationOption;
 import org.omegazero.common.eventbus.EventBusSubscriber;
 import org.omegazero.common.eventbus.SubscribeEvent;
 import org.omegazero.http.util.HTTPStatus;
@@ -18,11 +19,8 @@ import org.omegazero.proxy.net.UpstreamServer;
 public class NoDNSRoot {
 
 
+	@ConfigurationOption
 	private boolean redirectPermanent = false;
-
-	public synchronized void configurationReload(ConfigObject config) {
-		this.redirectPermanent = config.optBoolean("redirectPermanent", false);
-	}
 
 
 	@SubscribeEvent(priority = SubscribeEvent.Priority.HIGHEST)

@@ -15,10 +15,11 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.omegazero.common.config.ConfigObject;
+import org.omegazero.common.config.ConfigurationOption;
 import org.omegazero.common.eventbus.EventBusSubscriber;
 import org.omegazero.common.eventbus.SubscribeEvent;
 import org.omegazero.common.logging.Logger;
-import org.omegazero.common.logging.LoggerUtil;
+import org.omegazero.common.plugins.ExtendedPluginConfiguration;
 import org.omegazero.net.socket.SocketConnection;
 import org.omegazero.proxy.http.ProxyHTTPRequest;
 import org.omegazero.proxy.http.ProxyHTTPResponse;
@@ -27,22 +28,22 @@ import org.omegazero.proxy.net.UpstreamServer;
 @EventBusSubscriber
 public class ServerTimingPlugin {
 
-	private static final Logger logger = LoggerUtil.createLogger();
+	private static final Logger logger = Logger.create();
 
 	private static final Pattern durPattern = Pattern.compile("dur=[\\-0-9\\.e]+");
 
 
+	@ConfigurationOption
 	private boolean addStart;
+	@ConfigurationOption
 	private boolean subtractOriginTiming;
 
 	private String headerVal;
 
+	@ExtendedPluginConfiguration
 	public synchronized void configurationReload(ConfigObject config) {
 		String metricDesc = config.optString("metricDesc", null);
 		String metricName = config.optString("metricName", "proxy-timing");
-		this.addStart = config.optBoolean("addStart", true);
-		this.subtractOriginTiming = config.optBoolean("subtractOriginTiming", true);
-
 		this.headerVal = metricName + (metricDesc != null ? (";desc=\"" + metricDesc + "\"") : "") + ";dur=";
 	}
 

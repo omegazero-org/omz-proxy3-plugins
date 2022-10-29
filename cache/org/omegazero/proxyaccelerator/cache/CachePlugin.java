@@ -20,13 +20,14 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
 import org.omegazero.common.config.ConfigObject;
+import org.omegazero.common.config.ConfigurationOption;
 import org.omegazero.common.event.Tasks;
 import org.omegazero.common.eventbus.Event;
 import org.omegazero.common.eventbus.EventBusSubscriber;
 import org.omegazero.common.eventbus.SubscribeEvent;
 import org.omegazero.common.eventbus.SubscribeEvent.Priority;
 import org.omegazero.common.logging.Logger;
-import org.omegazero.common.logging.LoggerUtil;
+import org.omegazero.common.plugins.ExtendedPluginConfiguration;
 import org.omegazero.http.common.HTTPMessage;
 import org.omegazero.http.common.HTTPRequest;
 import org.omegazero.http.common.HTTPResponse;
@@ -42,7 +43,7 @@ import org.omegazero.proxyaccelerator.cache.integration.VHostIntegration;
 @EventBusSubscriber
 public class CachePlugin {
 
-	private static final Logger logger = LoggerUtil.createLogger();
+	private static final Logger logger = Logger.create();
 
 	private static Map<String, Supplier<ResourceCache>> cacheTypes = new ConcurrentHashMap<>();
 	private static Map<String, VaryComparator> varyComparators = new ConcurrentHashMap<>();
@@ -58,15 +59,21 @@ public class CachePlugin {
 	private CacheConfig cacheConfig;
 	private VHostIntegration pluginVhost;
 
-	private String cacheName;
-	private boolean appendCacheName;
-	private String cacheServedByPrefix;
-	private String cacheType;
-	private long cacheLimit;
+	@ConfigurationOption
+	private String name = null;
+	@ConfigurationOption
+	private boolean appendCacheName = false;
+	@ConfigurationOption
+	private String servedByPrefix = "cache-";
+	@ConfigurationOption
+	private String type = "lru";
+	@ConfigurationOption
+	private long sizeLimit = (long) (Runtime.getRuntime().maxMemory() * 0.5f);
 
 	private ResourceCache cache;
 
 
+	@ExtendedPluginConfiguration
 	public synchronized void configurationReload(ConfigObject config) {
 		this.cacheConfig = CacheConfig.from(config, null);
 
@@ -76,12 +83,6 @@ public class CachePlugin {
 		}else if(this.pluginVhost != null)
 			this.pluginVhost.invalidate();
 
-		this.cacheName = config.optString("name", null);
-		this.appendCacheName = config.optBoolean("appendCacheName", false);
-		this.cacheServedByPrefix = config.optString("servedByPrefix", "cache-");
-		this.cacheType = config.optString("type", "lru");
-		this.cacheLimit = config.optLong("sizeLimit", (long) (Runtime.getRuntime().maxMemory() * 0.5f));
-
 		if(this.cache != null) // dont create cache on plugin init (done in onInit instead)
 			this.reloadCache();
 	}
@@ -90,7 +91,7 @@ public class CachePlugin {
 	@SubscribeEvent
 	public void onPreinit() {
 		if(this.appendCacheName)
-			Proxy.getInstance().setInstanceNameAppendage(this.cacheName);
+			Proxy.getInstance().setInstanceNameAppendage(this.name);
 	}
 
 	@SubscribeEvent
@@ -242,8 +243,8 @@ public class CachePlugin {
 
 	private void purgeReply(HTTPRequest request, int status, String statusmsg, String additional) {
 		String resJson = "{\"status\":\"" + statusmsg + "\"";
-		if(this.cacheName != null)
-			resJson += ",\"server\":\"" + this.cacheServedByPrefix + this.cacheName + "\"";
+		if(this.name != null)
+			resJson += ",\"server\":\"" + this.servedByPrefix + this.name + "\"";
 		if(additional != null)
 			resJson += additional;
 		resJson += "}";
@@ -275,8 +276,8 @@ public class CachePlugin {
 		msg.appendHeader("x-cache", hit ? "HIT" : "MISS", ", ");
 		msg.appendHeader("x-cache-lookup", entry != null ? "HIT" : "MISS", ", ");
 		msg.appendHeader("x-cache-hits", entry != null ? String.valueOf(entry.getHits()) : "0", ", ");
-		if(this.cacheName != null)
-			msg.appendHeader("x-served-by", this.cacheServedByPrefix + this.cacheName, ", ");
+		if(this.name != null)
+			msg.appendHeader("x-served-by", this.servedByPrefix + this.name, ", ");
 	}
 
 	private CacheConfig getConfig(UpstreamServer userver) {
@@ -312,11 +313,11 @@ public class CachePlugin {
 		if(this.cache != null)
 			this.cache.close();
 
-		Supplier<ResourceCache> supplier = CachePlugin.cacheTypes.get(this.cacheType);
+		Supplier<ResourceCache> supplier = CachePlugin.cacheTypes.get(this.type);
 		if(supplier == null)
-			throw new IllegalArgumentException("Invalid cache type '" + this.cacheType + "'");
+			throw new IllegalArgumentException("Invalid cache type '" + this.type + "'");
 		this.cache = supplier.get();
-		this.cache.setMaxCacheSize(this.cacheLimit);
+		this.cache.setMaxCacheSize(this.sizeLimit);
 
 		logger.debug("Initialized cache type ", this.cache.getClass().getName());
 	}

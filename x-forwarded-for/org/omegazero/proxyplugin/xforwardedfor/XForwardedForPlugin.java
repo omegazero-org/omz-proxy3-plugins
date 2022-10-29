@@ -18,11 +18,13 @@ import java.util.regex.Pattern;
 
 import org.omegazero.common.config.ConfigArray;
 import org.omegazero.common.config.ConfigObject;
+import org.omegazero.common.config.ConfigurationOption;
 import org.omegazero.common.eventbus.EventBusSubscriber;
 import org.omegazero.common.eventbus.SubscribeEvent;
 import org.omegazero.common.eventbus.SubscribeEvent.Priority;
 import org.omegazero.common.logging.Logger;
 import org.omegazero.common.logging.LoggerUtil;
+import org.omegazero.common.plugins.ExtendedPluginConfiguration;
 import org.omegazero.http.util.HTTPStatus;
 import org.omegazero.net.socket.SocketConnection;
 import org.omegazero.proxy.http.ProxyHTTPRequest;
@@ -37,29 +39,30 @@ public class XForwardedForPlugin {
 	private static final String HEADER_XFP = "x-forwarded-proto";
 
 
-	private String[] allowedClients;
+	@ConfigurationOption
+	private java.util.List<String> allowedClients;
+	@ConfigurationOption
+	private boolean enforceAllowedClients = false;
+	@ConfigurationOption
+	private boolean enforceExpectedParts = false;
+	@ConfigurationOption
+	private boolean requireHeader = false;
+	@ConfigurationOption
+	private boolean includePortNumber = false;
+	@ConfigurationOption
+	private boolean enableDownstream = true;
+	@ConfigurationOption
+	private boolean enableUpstream = true;
+	@ConfigurationOption
+	private boolean forwardHeader = true;
+	@ConfigurationOption
+	private boolean enableForwardProto = true;
+
 	private Object[] expectedParts;
-	private boolean enforceAllowedClients;
-	private boolean enforceExpectedParts;
-	private boolean requireHeader;
-	private boolean includePortNumber;
-	private boolean enableDownstream;
-	private boolean enableUpstream;
-	private boolean forwardHeader;
-	private boolean enableForwardProto;
 
 
+	@ExtendedPluginConfiguration
 	public synchronized void configurationReload(ConfigObject config) {
-		ConfigArray acArr = config.optArray("allowedClients");
-		if(acArr != null){
-			this.allowedClients = new String[acArr.size()];
-			int i = 0;
-			for(Object o : acArr){
-				if(!(o instanceof String))
-					throw new IllegalArgumentException("Values 'allowedClients' must be strings");
-				this.allowedClients[i++] = (String) o;
-			}
-		}
 		ConfigArray epArr = config.optArray("expectedParts");
 		if(epArr != null){
 			this.expectedParts = new Object[epArr.size()];
@@ -84,14 +87,6 @@ public class XForwardedForPlugin {
 			}
 		}else
 			this.expectedParts = null;
-		this.enforceAllowedClients = config.optBoolean("enforceAllowedClients", false);
-		this.enforceExpectedParts = config.optBoolean("enforceExpectedParts", false);
-		this.requireHeader = config.optBoolean("requireHeader", false);
-		this.includePortNumber = config.optBoolean("includePortNumber", false);
-		this.enableDownstream = config.optBoolean("enableDownstream", true);
-		this.enableUpstream = config.optBoolean("enableUpstream", true);
-		this.forwardHeader = config.optBoolean("forwardHeader", true);
-		this.enableForwardProto = config.optBoolean("enableForwardProto", true);
 	}
 
 
@@ -122,8 +117,9 @@ public class XForwardedForPlugin {
 
 		boolean allowedClient = false;
 		if(this.allowedClients != null){
+			String clientaddr = ((InetSocketAddress) downstreamConnection.getRemoteAddress()).getAddress().getHostAddress();
 			for(String s : this.allowedClients){
-				if(s.equals(((InetSocketAddress) downstreamConnection.getRemoteAddress()).getAddress().getHostAddress())){
+				if(s.equals(clientaddr)){
 					allowedClient = true;
 					break;
 				}

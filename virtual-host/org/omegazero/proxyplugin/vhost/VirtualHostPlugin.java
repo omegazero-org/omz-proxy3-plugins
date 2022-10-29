@@ -27,6 +27,7 @@ import org.omegazero.common.eventbus.SubscribeEvent;
 import org.omegazero.common.eventbus.SubscribeEvent.Priority;
 import org.omegazero.common.logging.Logger;
 import org.omegazero.common.logging.LoggerUtil;
+import org.omegazero.common.plugins.ExtendedPluginConfiguration;
 import org.omegazero.http.util.HTTPStatus;
 import org.omegazero.net.socket.SocketConnection;
 import org.omegazero.proxy.http.ProxyHTTPRequest;
@@ -41,6 +42,7 @@ public class VirtualHostPlugin {
 	private Map<String, ConfigObject> templates = new HashMap<>();
 	private VHostNode rootNode;
 
+	@ExtendedPluginConfiguration
 	public synchronized void configurationReload(ConfigObject config) throws UnknownHostException {
 		this.templates.clear();
 		this.rootNode = new VHostNode();

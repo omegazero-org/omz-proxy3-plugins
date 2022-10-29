@@ -23,7 +23,7 @@ import org.omegazero.common.config.ConfigObject;
 import org.omegazero.common.eventbus.EventBusSubscriber;
 import org.omegazero.common.eventbus.SubscribeEvent;
 import org.omegazero.common.logging.Logger;
-import org.omegazero.common.logging.LoggerUtil;
+import org.omegazero.common.plugins.ExtendedPluginConfiguration;
 import org.omegazero.http.common.HTTPMessage;
 import org.omegazero.http.common.HTTPRequest;
 import org.omegazero.http.common.HTTPResponse;
@@ -35,13 +35,14 @@ import org.omegazero.proxy.util.ProxyUtil;
 @EventBusSubscriber
 public class CustomHeadersPlugin {
 
-	private static final Logger logger = LoggerUtil.createLogger();
+	private static final Logger logger = Logger.create();
 
 
 	private final List<Host> hosts = new ArrayList<>();
 
 	private VHostIntegration pluginVhost;
 
+	@ExtendedPluginConfiguration
 	public synchronized void configurationReload(ConfigObject config) {
 		this.hosts.clear();
 		for(String hostname : config.keySet()){

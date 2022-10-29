@@ -26,7 +26,7 @@ import org.omegazero.common.eventbus.EventBusSubscriber;
 import org.omegazero.common.eventbus.SubscribeEvent;
 import org.omegazero.common.eventbus.SubscribeEvent.Priority;
 import org.omegazero.common.logging.Logger;
-import org.omegazero.common.logging.LoggerUtil;
+import org.omegazero.common.plugins.ExtendedPluginConfiguration;
 import org.omegazero.http.common.HTTPRequest;
 import org.omegazero.net.socket.SocketConnection;
 import org.omegazero.proxy.net.UpstreamServer;
@@ -35,11 +35,12 @@ import org.omegazero.proxy.util.ProxyUtil;
 @EventBusSubscriber
 public class ProxyResourcesPlugin {
 
-	private static final Logger logger = LoggerUtil.createLogger();
+	private static final Logger logger = Logger.create();
 
 
 	private List<Resource> resources = new ArrayList<>();
 
+	@ExtendedPluginConfiguration
 	public synchronized void configurationReload(ConfigObject config) throws IOException {
 		this.resources.clear();
 		ConfigArray arr = config.optArray("resources");

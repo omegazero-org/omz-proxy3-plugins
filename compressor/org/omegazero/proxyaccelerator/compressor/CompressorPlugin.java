@@ -20,11 +20,11 @@ import java.util.function.Supplier;
 
 import org.omegazero.common.config.ConfigArray;
 import org.omegazero.common.config.ConfigObject;
+import org.omegazero.common.config.ConfigurationOption;
 import org.omegazero.common.eventbus.EventBusSubscriber;
 import org.omegazero.common.eventbus.SubscribeEvent;
 import org.omegazero.common.eventbus.SubscribeEvent.Priority;
 import org.omegazero.common.logging.Logger;
-import org.omegazero.common.logging.LoggerUtil;
 import org.omegazero.http.common.HTTPRequest;
 import org.omegazero.http.common.HTTPResponse;
 import org.omegazero.http.common.HTTPResponseData;
@@ -37,31 +37,19 @@ import org.omegazero.proxyaccelerator.cache.VaryComparator;
 @EventBusSubscriber
 public class CompressorPlugin {
 
-	private static final Logger logger = LoggerUtil.createLogger();
+	private static final Logger logger = Logger.create();
 
 	private static Map<String, Supplier<Compressor>> compressors = new ConcurrentHashMap<>();
 
 
+	@ConfigurationOption
 	private List<String> enabledMimeTypes = new ArrayList<>();
-	private String preferredCompressor;
-	private boolean onlyIfChunked;
-	private boolean onlyIfNoEncoding;
-
-	public synchronized void configurationReload(ConfigObject config) {
-		this.enabledMimeTypes.clear();
-
-		ConfigArray enabledMimeTypesArr = config.optArray("enabledMimeTypes");
-		if(enabledMimeTypesArr != null){
-			for(Object o : enabledMimeTypesArr){
-				if(!(o instanceof String))
-					throw new IllegalArgumentException("Values in 'enabledMimeTypes' must be strings");
-				this.enabledMimeTypes.add((String) o);
-			}
-		}
-		this.preferredCompressor = config.optString("preferredCompressor", null);
-		this.onlyIfChunked = config.optBoolean("onlyIfChunked", false);
-		this.onlyIfNoEncoding = config.optBoolean("onlyIfNoEncoding", true);
-	}
+	@ConfigurationOption
+	private String preferredCompressor = null;
+	@ConfigurationOption
+	private boolean onlyIfChunked = false;
+	@ConfigurationOption
+	private boolean onlyIfNoEncoding = true;
 
 
 	@SubscribeEvent

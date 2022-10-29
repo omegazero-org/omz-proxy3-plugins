@@ -16,6 +16,7 @@ import java.util.List;
 
 import org.omegazero.common.config.ConfigArray;
 import org.omegazero.common.config.ConfigObject;
+import org.omegazero.common.config.ConfigurationOption;
 import org.omegazero.common.eventbus.EventBusSubscriber;
 import org.omegazero.common.eventbus.SubscribeEvent;
 import org.omegazero.common.eventbus.SubscribeEvent.Priority;
@@ -32,19 +33,8 @@ public class RedirectInsecurePlugin {
 	private static final Logger logger = LoggerUtil.createLogger();
 
 
+	@ConfigurationOption
 	private List<String> hostnames = new ArrayList<>();
-
-	public synchronized void configurationReload(ConfigObject config) {
-		this.hostnames.clear();
-		ConfigArray arr = config.optArray("hostnames");
-		if(arr == null)
-			return;
-		for(Object o : arr){
-			if(!(o instanceof String))
-				throw new IllegalArgumentException("Values in 'hostnames' must be strings");
-			this.hostnames.add((String) o);
-		}
-	}
 
 
 	@SubscribeEvent(priority = Priority.HIGHEST)

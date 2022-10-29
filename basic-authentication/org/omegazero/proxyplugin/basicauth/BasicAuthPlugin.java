@@ -25,7 +25,7 @@ import org.omegazero.common.eventbus.EventBusSubscriber;
 import org.omegazero.common.eventbus.SubscribeEvent;
 import org.omegazero.common.eventbus.SubscribeEvent.Priority;
 import org.omegazero.common.logging.Logger;
-import org.omegazero.common.logging.LoggerUtil;
+import org.omegazero.common.plugins.ExtendedPluginConfiguration;
 import org.omegazero.http.util.HTTPStatus;
 import org.omegazero.net.socket.SocketConnection;
 import org.omegazero.proxy.http.ProxyHTTPRequest;
@@ -36,11 +36,12 @@ import org.omegazero.proxyplugin.vhost.VirtualHost;
 @EventBusSubscriber
 public class BasicAuthPlugin {
 
-	private static final Logger logger = LoggerUtil.createLogger();
+	private static final Logger logger = Logger.create();
 
 
 	private final Map<String, User> users = new HashMap<>();
 
+	@ExtendedPluginConfiguration
 	public synchronized void configurationReload(ConfigObject config) {
 		this.users.clear();
 		ConfigArray usersArr = config.optArray("users");
