@@ -204,7 +204,9 @@ public class VirtualHostPlugin {
 
 
 	@SubscribeEvent
-	public UpstreamServer selectUpstreamServer(String hostname, String path) {
+	public UpstreamServer onHTTPRequestSelectServer(SocketConnection downstreamConnection, ProxyHTTPRequest request) {
+		String hostname = request.getAuthority();
+		String path = request.getPath();
 		VirtualHost host = this.selectHost(hostname, path);
 		if(host != null){
 			logger.trace("Selected virtual host [", host, "] for ", hostname, path);
