@@ -20,7 +20,6 @@ import java.util.regex.Pattern;
 import org.omegazero.common.config.ConfigArray;
 import org.omegazero.common.config.ConfigObject;
 import org.omegazero.common.util.PropertyUtil;
-import org.omegazero.http.common.HTTPMessage;
 import org.omegazero.http.common.HTTPRequest;
 import org.omegazero.http.common.HTTPResponse;
 import org.omegazero.proxyaccelerator.cache.CacheControlUtil.CacheControlParameters;
@@ -98,6 +97,7 @@ public class CacheConfig {
 		String cacheControl = response.getHeader("cache-control");
 
 		int maxAge = 0;
+		int maxStaleIfError = 0;
 		boolean immutable = false;
 		if(cacheControl != null){
 			CacheControlParameters params = CacheControlUtil.parseCacheControl(cacheControl);
@@ -117,6 +117,8 @@ public class CacheConfig {
 				maxAge = override.maxAgeOverride;
 
 			immutable = (params.getFlags() & (CacheControlParameters.IMMUTABLE | CacheControlParameters.IMMUTABLE_SHARED)) != 0;
+
+			maxStaleIfError = params.getMaxStaleIfError();
 		}else if(statusCacheable)
 			maxAge = override.defaultMaxAge;
 		if(maxAge <= 0)
@@ -131,36 +133,21 @@ public class CacheConfig {
 			}
 		}
 
-		return new CacheEntry.Properties(override, override.maxResourceSize, maxAge, varyValues, immutable);
+		return new CacheEntry.Properties(override, maxAge, maxStaleIfError, immutable, varyValues);
 	}
 
 	/**
 	 * Checks if the response in the given cache entry may be used as a response to the given <b>request</b> based on this configuration. This method does not check if the
-	 * cache entry represents the resource requested (use {@link CacheEntry#isUsableFor(HTTPMessage)}).
+	 * cache entry represents the resource requested.
 	 * 
 	 * @param request The request
-	 * @param cache
+	 * @param cache The cache entry
 	 * @return <code>true</code> if this configuration allows the response data of the cache entry to be used to generate a response for the given request
+	 * @deprecated Use {@link CacheEntry#isUsableFor(HTTPRequest, boolean)}
 	 */
-	public boolean isUsable(HTTPMessage request, CacheEntry cache) {
-		CacheConfigOverride override = (CacheConfigOverride) cache.getProperties().getConfig();
-		if(override.ignoreClientRefresh || (override.ignoreClientRefreshIfImmutable && cache.getProperties().isImmutable()))
-			return true;
-
-		String cacheControl = request.getHeader("cache-control");
-		if(cacheControl == null)
-			return !cache.isStale();
-
-		CacheControlParameters params = CacheControlUtil.parseCacheControl(cacheControl);
-		if((params.getFlags() & CacheControlParameters.NOCACHE) != 0) // revalidation is not supported
-			return false;
-		if(params.getMaxAge() >= 0 && cache.age() > params.getMaxAge())
-			return false;
-		if(params.getMinFresh() >= 0 && cache.freshRemaining() < params.getMinFresh())
-			return false;
-		if(params.getMaxStale() >= 0 && -cache.freshRemaining() < params.getMaxStale())
-			return true;
-		return !cache.isStale();
+	@Deprecated
+	public boolean isUsable(HTTPRequest request, CacheEntry cache) {
+		return cache.isUsableFor(request, false);
 	}
 
 
@@ -219,19 +206,19 @@ public class CacheConfig {
 
 	public static class CacheConfigOverride {
 
-		private final Pattern hostMatcher;
-		private final Pattern pathMatcher;
+		public final Pattern hostMatcher;
+		public final Pattern pathMatcher;
 
-		private final int defaultMaxAge;
-		private final int maxAgeOverride;
-		private final boolean maxAgeOverrideCacheableOnly;
-		private final boolean ignoreClientRefresh;
-		private final boolean ignoreClientRefreshIfImmutable;
-		private final int maxResourceSize;
+		public final int defaultMaxAge;
+		public final int maxAgeOverride;
+		public final boolean maxAgeOverrideCacheableOnly;
+		public final boolean ignoreClientRefresh;
+		public final boolean ignoreClientRefreshIfImmutable;
+		public final int maxResourceSize;
 
-		private final String purgeKey;
-		private final boolean propagatePurgeRequest;
-		private final boolean wildcardPurgeEnabled;
+		public final String purgeKey;
+		public final boolean propagatePurgeRequest;
+		public final boolean wildcardPurgeEnabled;
 
 		CacheConfigOverride(Pattern hostMatcher, Pattern pathMatcher, int defaultMaxAge, int maxAgeOverride, boolean maxAgeOverrideCacheableOnly, boolean ignoreClientRefresh,
 				boolean ignoreClientRefreshIfImmutable, int maxResourceSize, String purgeKey, boolean propagatePurgeRequest, boolean wildcardPurgeEnabled) {
@@ -246,19 +233,6 @@ public class CacheConfig {
 			this.purgeKey = purgeKey;
 			this.propagatePurgeRequest = propagatePurgeRequest;
 			this.wildcardPurgeEnabled = wildcardPurgeEnabled;
-		}
-
-
-		public String getPurgeKey() {
-			return this.purgeKey;
-		}
-
-		public boolean isPropagatePurgeRequest() {
-			return this.propagatePurgeRequest;
-		}
-
-		public boolean isWildcardPurgeEnabled() {
-			return this.wildcardPurgeEnabled;
 		}
 	}
 

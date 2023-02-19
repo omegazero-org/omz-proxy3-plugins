@@ -57,12 +57,7 @@ public class SoftReferenceCache implements ResourceCache {
 		Reference<CacheEntry> ref = this.cache.get(primaryKey);
 		if(ref == null)
 			return null;
-		CacheEntry entry = ref.get();
-		if(entry == null || entry.isStale()){
-			this.cache.remove(primaryKey);
-			return null;
-		}else
-			return entry;
+		return ref.get();
 	}
 
 	@Override
@@ -97,10 +92,6 @@ public class SoftReferenceCache implements ResourceCache {
 			if(entry == null || entry.isStale())
 				iterator.remove();
 		}
-	}
-
-	@Override
-	public void setMaxCacheSize(long bytes) {
 	}
 
 	@Override

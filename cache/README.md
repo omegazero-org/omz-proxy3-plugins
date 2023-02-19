@@ -16,8 +16,36 @@ Global variables are set directly in the plugin configuration object.
 | name | string | The name of this cache advertised in the `X-Served-By` HTTP header. The header is disabled if this value is `null`. | no | `null` |
 | appendCacheName | boolean | Whether to append the cache name to the proxy name. This property only has an effect during initialization. | no | `false` |
 | servedByPrefix | string | The prefix to prepend to `name` in the `X-Served-By` HTTP header. | no | `"cache-"` |
-| type | string | The cache implementation to use. Currently, there are two builtin cache implementations: "lru" is a size-limited [LRU](https://en.wikipedia.org/wiki/Cache_replacement_policies#Least_recently_used_(LRU))-cache; "softreference" is a cache based on [SoftReference](https://docs.oracle.com/javase/8/docs/api/java/lang/ref/SoftReference.html)s, meaning the cache may use all available memory but entries are automatically deleted when there is memory pressure. | no | `"lru"` |
+| caches | array(object) | The list of cache levels and their respective configurations to use. The caches are fetched from in the order they are listed (i.e. the first listed cache is the first level cache). If `null`, a single cache level is used with the configuration contained in this plugin configuration object. Each object contains a required `type` property, and other cache-type-specific settings (see below). | no | `null` |
+
+### Cache type configuration
+
+There are three built-in cache types, usable as the value for the `type` parameter in a cache level configuration. Type-specific settings are listed in the respective section below.
+
+#### "lru"
+
+A size-limited [LRU](https://en.wikipedia.org/wiki/Cache_replacement_policies#Least_recently_used_(LRU))-cache.
+
+| Name | Type | Description | Required | Default value |
+| --- | --- | --- | --- | --- |
 | sizeLimit | number | The maximum amount of memory the cache may use for resources in bytes. Note that this value is only a recommendation: the cache may also use more or less memory than the value specified or may ignore this value entirely. | no | half of available memory |
+
+#### "softreference"
+
+A cache based on [SoftReference](https://docs.oracle.com/javase/8/docs/api/java/lang/ref/SoftReference.html)s, meaning the cache may use all available memory but entries are automatically deleted when there is memory pressure.
+
+No additional settings.
+
+#### "disk"
+
+A cache storing data on disk.
+
+| Name | Type | Description | Required | Default value |
+| --- | --- | --- | --- | --- |
+| cacheBaseDir | string | The directory to store cached data in. | yes | - |
+| maxSize | number | The maximum amount of data to store on disk, in bytes. | no | 1 GiB |
+| compress | boolean | Whether to compress data before storing it on disk. | no | `true` |
+| rewriteDelay | number | Time in milliseconds to wait between writing the same cache file again. | no | `5000` |
 
 ### Cache configuration
 
@@ -77,10 +105,10 @@ This plugin provides an integration with the *VirtualHost* plugin. Each virtual 
 
 ### Resources that may be cached
 
-Resources are considered cacheable if:
+A resource is considered cacheable if all of the following are true:
 - the cache is enabled
-- they were requested using either the GET or HEAD request method
-- they were returned with any of the following response statuses: 200, 204, 301, 308, 410. This set may be expanded using the `org.omegazero.proxyaccelerator.cache.cacheableStatuses` system property consisting of a comma-separated list of numbers
+- it was requested using either the GET or HEAD request method
+- it was returned with any of the following response statuses: 200, 204, 301, 308, 410. This set may be expanded using the `org.omegazero.proxyaccelerator.cache.cacheableStatuses` system property consisting of a comma-separated list of numbers
 - neither the request nor the response contain the `Cache-Control` directive `no-store`
 - the resource size is lower than the maximum value set
 - the origin server advertised the resource as cacheable in a `Cache-Control` header **OR** the cacheability was overridden by the configuration
@@ -112,9 +140,11 @@ If any of the last four headers are already present in the response, the new val
 
 ### Registering a new cache implementation
 
-Other plugins may add cache implementations identified by a short name that may then be set as a value for `type` in the global configuration.
+Other plugins may add cache implementations identified by a short name that can then be set as a value for `type` in the configuration.
+
+The `ConfigObject` passed to the constructor function is the type-specific configuration.
 ```java
-public static boolean org.omegazero.proxyaccelerator.cache.CachePlugin.registerCacheImplementation(String, Supplier<ResourceCache>);
+public static boolean org.omegazero.proxyaccelerator.cache.CachePlugin.registerCacheImplementation(String, Function<? super ConfigObject, ? extends ResourceCache>);
 ```
 Returns `true` if the new implementation was successfully registered, `false` if an implementation with the given name already exists.
 

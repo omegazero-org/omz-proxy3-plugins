@@ -40,9 +40,11 @@ public final class CacheControlUtil {
 			else if(part.startsWith("s-maxage"))
 				params.maxAgeShared = getNumberArgumentValue(part, -1);
 			else if(part.startsWith("max-stale"))
-				params.maxStale = getNumberArgumentValue(part, Integer.MAX_VALUE);
+				params.maxStale = getNumberArgumentValue(part, -1);
 			else if(part.startsWith("min-fresh"))
 				params.minFresh = getNumberArgumentValue(part, -1);
+			else if(part.startsWith("stale-if-error"))
+				params.maxStaleIfError = getNumberArgumentValue(part, -1);
 		}
 		return params;
 	}
@@ -107,6 +109,7 @@ public final class CacheControlUtil {
 		private int maxAgeShared = -1;
 		private int maxStale = -1;
 		private int minFresh = -1;
+		private int maxStaleIfError = -1;
 
 
 		public int getFlags() {
@@ -127,6 +130,10 @@ public final class CacheControlUtil {
 
 		public int getMinFresh() {
 			return this.minFresh;
+		}
+
+		public int getMaxStaleIfError() {
+			return this.maxStaleIfError;
 		}
 	}
 }

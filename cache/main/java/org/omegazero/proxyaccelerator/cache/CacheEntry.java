@@ -17,9 +17,10 @@ import org.omegazero.http.common.HTTPMessage;
 import org.omegazero.http.common.HTTPRequest;
 import org.omegazero.http.common.HTTPResponse;
 
-public class CacheEntry {
+public class CacheEntry implements java.io.Serializable {
 
-	private final HTTPRequest request;
+	private static final long serialVersionUID = 1L;
+
 	private final HTTPResponse response;
 	private final byte[] responseData;
 	private final long expiresAt;
@@ -30,8 +31,7 @@ public class CacheEntry {
 
 	private int hits;
 
-	public CacheEntry(HTTPRequest request, HTTPResponse response, byte[] responseData, long expiresAt, int correctedAgeValue, Properties properties) {
-		this.request = request;
+	public CacheEntry(HTTPResponse response, byte[] responseData, long expiresAt, int correctedAgeValue, Properties properties) {
 		this.response = response;
 		this.responseData = responseData;
 		this.expiresAt = expiresAt;
@@ -53,46 +53,77 @@ public class CacheEntry {
 	}
 
 	/**
-	 * Checks if this <code>CacheEntry</code> is suitable to be used as a response to the given <b>request</b>. It is considered suitable if this entry is not stale and all
-	 * Vary headers match.<br>
+	 * Checks if this <code>CacheEntry</code> is suitable to be used as a response to the given <b>request</b>.
+	 * <p>
+	 * An entry is is considered suitable if all <i>Vary</i> headers match and the response is allowed to be served according to <i>Cache-Control</i> settings in the request and response.
 	 * <b>This method does not check if the HTTP request parameters (method, path, etc) are equal.</b>
-	 * 
-	 * @param request
+	 *
+	 * @param request The request
+	 * @param error If {@code true}, allows this {@code CacheEntry} to be used even if it is stale but within the limit set by the <i>stale-if-error</i> response directive
 	 * @return <code>true</code> if this entry is suitable to be used as a response to the given <b>request</b>
 	 * @see #isVaryMatching(HTTPMessage)
+	 * @see CacheConfig#isUsable(HTTPMessage, CacheEntry)
 	 */
-	public boolean isUsableFor(HTTPRequest request) {
-		return !this.isStale() && this.isVaryMatching(request);
+	public boolean isUsableFor(HTTPRequest request, boolean error) {
+		if(!this.isVaryMatching(request))
+			return false;
+
+		if(this.getProperties().ignoreClientRefresh)
+			return true;
+
+		long freshRemaining = this.freshRemaining();
+
+		if(error && -freshRemaining < this.getProperties().maxStaleIfError)
+			return true;
+
+		String cacheControl = request.getHeader("cache-control");
+		if(cacheControl != null){
+			CacheControlUtil.CacheControlParameters params = CacheControlUtil.parseCacheControl(cacheControl);
+			if((params.getFlags() & CacheControlUtil.CacheControlParameters.NOCACHE) != 0) // revalidation is not supported
+				return false;
+			if(params.getMaxAge() >= 0 && this.age() > params.getMaxAge())
+				return false;
+			if(params.getMinFresh() >= 0 && freshRemaining < params.getMinFresh())
+				return false;
+			if(params.getMaxStale() >= 0 && -freshRemaining < params.getMaxStale())
+				return true;
+		}
+
+		return !this.isStale();
 	}
 
 
 	/**
+	 * Returns the number of seconds this entry is still considered fresh. May be negative if this entry has expired.
 	 * 
-	 * @return The number of seconds this entry is still considered fresh. May be negative if this entry has expired
+	 * @return The remaining number of fresh seconds
 	 */
 	public long freshRemaining() {
 		return (this.expiresAt - CachePlugin.time()) / 1000;
 	}
 
 	/**
+	 * Returns <code>true</code> if the time at which this entry becomes stale is in the past.
 	 * 
-	 * @return <code>true</code> if the time at which this entry expires is in the past
+	 * @return {@code true} if this entry is stale
 	 */
 	public boolean isStale() {
 		return this.expiresAt < CachePlugin.time();
 	}
 
 	/**
+	 * Returns a rough estimation of the amount of memory this cache entry uses in bytes.
 	 * 
-	 * @return A rough estimation of the amount of memory this cache entry uses in bytes
+	 * @return The used memory in bytes
 	 */
 	public long getSize() {
 		return 8192 + this.responseData.length + this.properties.getVaryValuesSize() * 128 + 48;
 	}
 
 	/**
+	 * Returns the age of this entry (calculated as: <code>corrected_age_value + resident_time</code>).
 	 * 
-	 * @return The age of this entry (calculated as: <code>corrected_age_value + resident_time</code>)
+	 * @return The age in seconds
 	 */
 	public int age() {
 		return (int) ((CachePlugin.time() - this.creationTime) / 1000 + this.correctedAgeValue);
@@ -107,10 +138,6 @@ public class CacheEntry {
 		return ++this.hits;
 	}
 
-
-	public HTTPRequest getRequest() {
-		return this.request;
-	}
 
 	public HTTPResponse getResponse() {
 		return this.response;
@@ -141,20 +168,23 @@ public class CacheEntry {
 	}
 
 
-	public static class Properties {
+	public static class Properties implements java.io.Serializable {
 
-		private final Object config;
-		private final int maxDataSize;
-		private final int maxAge;
+		private static final long serialVersionUID = 1L;
+
+		public final int maxResourceSize;
+		public final boolean ignoreClientRefresh;
+
+		public final int maxAge;
+		public final int maxStaleIfError;
 		private final Map<String, String> varyValues;
-		private final boolean immutable;
 
-		public Properties(Object config, int maxDataSize, int maxAge, Map<String, String> varyValues, boolean immutable) {
-			this.config = config;
-			this.maxDataSize = maxDataSize;
+		public Properties(CacheConfig.CacheConfigOverride config, int maxAge, int maxStaleIfError, boolean immutable, Map<String, String> varyValues) {
+			this.maxResourceSize = config.maxResourceSize;
+			this.ignoreClientRefresh = config.ignoreClientRefresh || immutable && config.ignoreClientRefreshIfImmutable;
 			this.maxAge = maxAge;
+			this.maxStaleIfError = maxStaleIfError;
 			this.varyValues = varyValues;
-			this.immutable = immutable;
 		}
 
 
@@ -167,24 +197,8 @@ public class CacheEntry {
 		}
 
 
-		public Object getConfig() {
-			return this.config;
-		}
-
-		public int getMaxDataSize() {
-			return this.maxDataSize;
-		}
-
-		public int getMaxAge() {
-			return this.maxAge;
-		}
-
 		public int getVaryValuesSize() {
 			return this.varyValues.size();
-		}
-
-		public boolean isImmutable() {
-			return this.immutable;
 		}
 	}
 }

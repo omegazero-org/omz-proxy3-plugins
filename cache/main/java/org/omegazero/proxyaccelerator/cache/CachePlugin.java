@@ -17,8 +17,9 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Supplier;
+import java.util.function.Function;
 
+import org.omegazero.common.config.ConfigArray;
 import org.omegazero.common.config.ConfigObject;
 import org.omegazero.common.config.ConfigurationOption;
 import org.omegazero.common.event.Tasks;
@@ -29,7 +30,6 @@ import org.omegazero.common.eventbus.SubscribeEvent.Priority;
 import org.omegazero.common.logging.Logger;
 import org.omegazero.common.plugins.ExtendedPluginConfiguration;
 import org.omegazero.http.common.HTTPMessage;
-import org.omegazero.http.common.HTTPRequest;
 import org.omegazero.http.common.HTTPResponse;
 import org.omegazero.http.common.HTTPResponseData;
 import org.omegazero.http.util.HTTPStatus;
@@ -45,7 +45,7 @@ public class CachePlugin {
 
 	private static final Logger logger = Logger.create();
 
-	private static Map<String, Supplier<ResourceCache>> cacheTypes = new ConcurrentHashMap<>();
+	private static Map<String, Function<? super ConfigObject, ? extends ResourceCache>> cacheTypes = new ConcurrentHashMap<>();
 	private static Map<String, VaryComparator> varyComparators = new ConcurrentHashMap<>();
 
 	public static final Event EVENT_CACHE_HIT = new Event("cache_hit", new Class<?>[] { ProxyHTTPRequest.class, HTTPResponseData.class });
@@ -66,10 +66,11 @@ public class CachePlugin {
 	@ConfigurationOption
 	private String servedByPrefix = "cache-";
 	@ConfigurationOption
-	private String type = "lru";
+	private ConfigArray caches = null;
 	@ConfigurationOption
-	private long sizeLimit = (long) (Runtime.getRuntime().maxMemory() * 0.5f);
+	private boolean enableServeStale = true;
 
+	private ConfigObject singleCacheConfig;
 	private ResourceCache cache;
 
 
@@ -82,6 +83,11 @@ public class CachePlugin {
 			this.pluginVhost = new VHostIntegration();
 		}else if(this.pluginVhost != null)
 			this.pluginVhost.invalidate();
+
+		if(config.optString("type", null) != null)
+			this.singleCacheConfig = config;
+		else
+			this.singleCacheConfig = new ConfigObject();
 
 		if(this.cache != null) // dont create cache on plugin init (done in onInit instead)
 			this.reloadCache();
@@ -98,7 +104,7 @@ public class CachePlugin {
 	public void onInit() {
 		this.reloadCache();
 
-		Tasks.interval(this::cleanup, 60000).daemon();
+		Tasks.I.interval(this::cleanup, 60000).daemon();
 	}
 
 	@SubscribeEvent
@@ -111,9 +117,9 @@ public class CachePlugin {
 			CacheConfig.CacheConfigOverride cco = cc.getOverride(request);
 			if(cco == null)
 				return;
-			String purgeKey = cco.getPurgeKey();
+			String purgeKey = cco.purgeKey;
 			if(purgeKey == null){ // disabled
-				if(!cco.isPropagatePurgeRequest())
+				if(!cco.propagatePurgeRequest)
 					this.purgeReply(request, HTTPStatus.STATUS_METHOD_NOT_ALLOWED, "disabled", null);
 			}else if(purgeKey.length() > 0 && !purgeKey.equals(request.getHeader("x-purge-key"))){
 				this.purgeReply(request, HTTPStatus.STATUS_UNAUTHORIZED, "unauthorized", null);
@@ -122,7 +128,7 @@ public class CachePlugin {
 				if(purgeMethod == null)
 					purgeMethod = "GET";
 				String path = request.getInitialPath();
-				if(cco.isWildcardPurgeEnabled() && path.endsWith("**")){
+				if(cco.wildcardPurgeEnabled && path.endsWith("**")){
 					String keyPrefix = CachePlugin.getCacheKey(purgeMethod, request.getScheme(), request.getAuthority(), path.substring(0, path.length() - 2));
 					int deleted = this.cache.deleteIfKey((s) -> {
 						return s.startsWith(keyPrefix);
@@ -139,68 +145,19 @@ public class CachePlugin {
 					if(entry != null){
 						logger.debug("Purged cache entry '", key, "' (age ", entry.age(), ")");
 						this.purgeReply(request, HTTPStatus.STATUS_OK, "ok", null);
-					}else if(!cco.isPropagatePurgeRequest()){
+					}else if(!cco.propagatePurgeRequest){
 						this.purgeReply(request, HTTPStatus.STATUS_NOT_FOUND, "nonexistent", null);
 					}
 				}
 			}
 		}else{
-			String key = CachePlugin.getCacheKey(request);
-			CacheEntry entry = this.cache.fetch(key);
-			if(entry != null && entry.isUsableFor(request)){
-				CacheConfig cc = this.getConfig(userver);
-				if(!cc.isUsable(request, entry)){
-					Proxy.getInstance().dispatchEvent(EVENT_CACHE_MISS, request);
-					return;
-				}
-				HTTPResponse res = new HTTPResponse(entry.getResponse());
-				res.setHttpVersion(request.getHttpVersion());
-				entry.incrementHits();
-
-				boolean etagCondition = true;
-				String resourceTag = res.getHeader("etag");
-				String inm = request.getHeader("if-none-match");
-				if(resourceTag != null && inm != null){
-					if(inm.equals("*")){
-						etagCondition = false;
-					}else{
-						if(resourceTag.startsWith("W/"))
-							resourceTag = resourceTag.substring(2);
-						String[] etags = inm.split(",");
-						for(String etag : etags){
-							etag = etag.trim();
-							if(etag.startsWith("W/"))
-								etag = etag.substring(2);
-							if(etag.equals(resourceTag)){
-								etagCondition = false;
-								break;
-							}
-						}
-					}
-				}
-
-				byte[] data;
-				if(!etagCondition){
-					res.setStatus(HTTPStatus.STATUS_NOT_MODIFIED);
-					res.deleteHeader("content-length");
-					data = new byte[0];
-				}else{
-					data = entry.getResponseData();
-				}
-
-				this.addHeaders(res, entry, true);
-				HTTPResponseData resdata = new HTTPResponseData(res, data);
-				Proxy.getInstance().dispatchEvent(EVENT_CACHE_HIT, request, resdata);
-				request.respond(resdata);
-			}else{
-				Proxy.getInstance().dispatchEvent(EVENT_CACHE_MISS, request);
-			}
+			this.serveFromCache(request, false);
 		}
 	}
 
 	@SubscribeEvent(priority = Priority.LOWEST) // lowest to allow other plugins to edit the response before caching
 	public void onHTTPResponse(SocketConnection downstreamConnection, SocketConnection upstreamConnection, HTTPResponse response, UpstreamServer upstreamServer) {
-		String key = CachePlugin.getCacheKey(response.getOther());
+		String key = CachePlugin.getCacheKey((ProxyHTTPRequest) response.getOther());
 		CacheEntry entry = this.cache.fetch(key);
 		// if the entry already exists, it will be replaced if this response finishes
 
@@ -218,7 +175,7 @@ public class CachePlugin {
 			PendingCacheEntry pce = this.pendingCacheEntries.get(response);
 			if(pce != null){
 				if(!pce.addData(responsedata.getData())){
-					logger.debug("Removing pending cache entry because it is too large: ", pce.dataLen, " > ", pce.ceProperties.getMaxDataSize());
+					logger.debug("Removing pending cache entry because it is too large: ", pce.dataLen, " > ", pce.ceProperties.maxResourceSize);
 					this.pendingCacheEntries.remove(response);
 				}
 			}
@@ -231,7 +188,7 @@ public class CachePlugin {
 			PendingCacheEntry pce = this.pendingCacheEntries.get(response);
 			if(pce != null){
 				String key = pce.key;
-				logger.debug("Caching resource '", key, "' with maxAge ", pce.ceProperties.getMaxAge(), " (", pce.dataLen, " bytes)");
+				logger.debug("Caching resource '", key, "' with maxAge ", pce.ceProperties.maxAge, " (", pce.dataLen, " bytes)");
 				this.pendingCacheEntries.remove(response);
 				CacheEntry entry = pce.get();
 				Proxy.getInstance().dispatchEvent(EVENT_CACHE_STORE, entry);
@@ -240,8 +197,66 @@ public class CachePlugin {
 		}
 	}
 
+	@SubscribeEvent
+	public void onHTTPForwardFailed(SocketConnection downstreamConnection, SocketConnection upstreamConnection, ProxyHTTPRequest request, UpstreamServer userver, int status, String message){
+		if(!this.enableServeStale)
+			return;
+		this.serveFromCache(request, true);
+	}
 
-	private void purgeReply(HTTPRequest request, int status, String statusmsg, String additional) {
+
+	private void serveFromCache(ProxyHTTPRequest request, boolean error){
+		String key = CachePlugin.getCacheKey(request);
+		CacheEntry entry = this.cache.fetch(key);
+		if(entry != null && (error || !entry.isStale()) && entry.isUsableFor(request, error)){
+			HTTPResponse res = new HTTPResponse(entry.getResponse());
+			res.setHttpVersion(request.getHttpVersion());
+			entry.incrementHits();
+
+			boolean etagCondition = true;
+			String resourceTag = res.getHeader("etag");
+			String inm = request.getHeader("if-none-match");
+			if(resourceTag != null && inm != null){
+				if(inm.equals("*")){
+					etagCondition = false;
+				}else{
+					if(resourceTag.startsWith("W/"))
+						resourceTag = resourceTag.substring(2);
+					String[] etags = inm.split(",");
+					for(String etag : etags){
+						etag = etag.trim();
+						if(etag.startsWith("W/"))
+							etag = etag.substring(2);
+						if(etag.equals(resourceTag)){
+							etagCondition = false;
+							break;
+						}
+					}
+				}
+			}
+
+			byte[] data;
+			if(!etagCondition){
+				res.setStatus(HTTPStatus.STATUS_NOT_MODIFIED);
+				res.deleteHeader("content-length");
+				data = new byte[0];
+			}else{
+				data = entry.getResponseData();
+			}
+
+			this.addHeaders(res, entry, true);
+			if(entry.isStale())
+				res.addHeader("warning", "111 - \"response is stale, upstream server unreachable\"");
+			logger.debug("Serving cached response for request '", key, "' (proxy error: ", error, ", stale: ", entry.isStale(), ")");
+			HTTPResponseData resdata = new HTTPResponseData(res, data);
+			Proxy.getInstance().dispatchEvent(EVENT_CACHE_HIT, request, resdata);
+			request.respond(resdata);
+		}else{
+			Proxy.getInstance().dispatchEvent(EVENT_CACHE_MISS, request);
+		}
+	}
+
+	private void purgeReply(ProxyHTTPRequest request, int status, String statusmsg, String additional) {
 		String resJson = "{\"status\":\"" + statusmsg + "\"";
 		if(this.name != null)
 			resJson += ",\"server\":\"" + this.servedByPrefix + this.name + "\"";
@@ -310,21 +325,36 @@ public class CachePlugin {
 	}
 
 	private synchronized void reloadCache() {
+		ResourceCache newCache;
+		if(this.caches != null){
+			List<ResourceCache> cacheInstances = new java.util.ArrayList<>();
+			for(Object o : this.caches){
+				if(!(o instanceof ConfigObject))
+					throw new IllegalArgumentException("Entries in 'caches' must be objects");
+				cacheInstances.add(initCache((ConfigObject) o));
+			}
+			newCache = new MultiLevelCache(cacheInstances);
+		}else{
+			newCache = initCache(this.singleCacheConfig);
+		}
 		if(this.cache != null)
 			this.cache.close();
-
-		Supplier<ResourceCache> supplier = CachePlugin.cacheTypes.get(this.type);
-		if(supplier == null)
-			throw new IllegalArgumentException("Invalid cache type '" + this.type + "'");
-		this.cache = supplier.get();
-		this.cache.setMaxCacheSize(this.sizeLimit);
-
-		logger.debug("Initialized cache type ", this.cache.getClass().getName());
+		this.cache = newCache;
+		logger.debug("Initialized cache: ", this.cache.getClass().getName(), " (", this.cache, ")");
 	}
 
 
-	public static String getCacheKey(HTTPRequest request) {
-		return CachePlugin.getCacheKey(request.getMethod(), request.getScheme(), request.getAuthority(), request.getPath());
+	private static ResourceCache initCache(ConfigObject obj){
+		String type = obj.getString("type");
+		Function<? super ConfigObject, ? extends ResourceCache> supplier = CachePlugin.cacheTypes.get(type);
+		if(supplier == null)
+			throw new IllegalArgumentException("Invalid cache type '" + type + "'");
+		return supplier.apply(obj);
+	}
+
+
+	public static String getCacheKey(ProxyHTTPRequest request) {
+		return CachePlugin.getCacheKey(request.getInitialMethod(), request.getInitialScheme(), request.getInitialAuthority(), request.getInitialPath());
 	}
 
 	public static String getCacheKey(String method, String scheme, String authority, String path) {
@@ -338,11 +368,37 @@ public class CachePlugin {
 	 * @param supplier Generator for new instances of the cache
 	 * @return <code>true</code> if the implementation was registered successfully, <code>false</code> if an implementation with the given name already exists
 	 */
-	public static synchronized boolean registerCacheImplementation(String name, Supplier<ResourceCache> supplier) {
+	public static synchronized boolean registerCacheImplementation(String name, Function<? super ConfigObject, ? extends ResourceCache> supplier) {
 		if(CachePlugin.cacheTypes.containsKey(name))
 			return false;
 		CachePlugin.cacheTypes.put(name, supplier);
 		return true;
+	}
+
+	/**
+	 * Registers a new implementation of {@link ResourceCache} from the given class name.
+	 *
+	 * @param name The name of this implementation used in the configuration file
+	 * @param className The class name of the implementation
+	 * @return <code>true</code> if the implementation was registered successfully, <code>false</code> if the class was not found or an implementation with the given name already exists
+	 */
+	public static boolean registerCacheImplementationByClassName(String name, String className){
+		try{
+			@SuppressWarnings("unchecked")
+			Class<? extends ResourceCache> cl = (Class<? extends ResourceCache>) Class.forName(className);
+			java.lang.reflect.Constructor<? extends ResourceCache> clcons = cl.getConstructor(ConfigObject.class);
+			return registerCacheImplementation(name, (config) -> {
+				try{
+					return clcons.newInstance(config);
+				}catch(java.lang.reflect.InvocationTargetException e){
+					throw new RuntimeException("Constructor of '" + className + "' threw an error", e.getCause());
+				}catch(ReflectiveOperationException e){
+					throw new RuntimeException("Failed to create an instance of '" + className + "'", e);
+				}
+			});
+		}catch(ReflectiveOperationException e){
+			return false;
+		}
 	}
 
 	/**
@@ -445,7 +501,7 @@ public class CachePlugin {
 		public synchronized boolean addData(byte[] d) {
 			this.data.add(d);
 			this.dataLen += d.length;
-			return this.dataLen <= this.ceProperties.getMaxDataSize();
+			return this.dataLen <= this.ceProperties.maxResourceSize;
 		}
 
 		public synchronized CacheEntry get() {
@@ -461,18 +517,20 @@ public class CachePlugin {
 
 			this.request.lock();
 			this.response.lock();
-			return new CacheEntry(this.request, this.response, data, time() + (this.ceProperties.getMaxAge() - this.correctedAgeValue) * 1000L, this.correctedAgeValue,
-					this.ceProperties);
+			return new CacheEntry(this.response, data, time() + (this.ceProperties.maxAge - this.correctedAgeValue) * 1000L, this.correctedAgeValue, this.ceProperties);
 		}
 	}
 
 
 	static{
-		CachePlugin.registerCacheImplementation("lru", () -> {
-			return new org.omegazero.proxyaccelerator.cache.impl.LRUCache();
+		CachePlugin.registerCacheImplementation("lru", (config) -> {
+			org.omegazero.proxyaccelerator.cache.impl.LRUCache cache = new org.omegazero.proxyaccelerator.cache.impl.LRUCache();
+			cache.setMaxCacheSize(config.optLong("sizeLimit", (long) (Runtime.getRuntime().maxMemory() * 0.5f)));
+			return cache;
 		});
-		CachePlugin.registerCacheImplementation("softreference", () -> {
+		CachePlugin.registerCacheImplementation("softreference", (config) -> {
 			return new org.omegazero.proxyaccelerator.cache.impl.SoftReferenceCache();
 		});
+		CachePlugin.registerCacheImplementationByClassName("disk", "org.omegazero.proxyaccelerator.cache.impl.DiskCache");
 	}
 }

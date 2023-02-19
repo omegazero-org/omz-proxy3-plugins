@@ -80,8 +80,11 @@ public interface ResourceCache {
 	 * than the given value or may ignore this value entirely.
 	 * 
 	 * @param bytes The recommended maximum size in bytes
+	 * @deprecated Since 1.4, pass max cache size in constructor config instead
 	 */
-	public void setMaxCacheSize(long bytes);
+	@Deprecated
+	public default void setMaxCacheSize(long bytes){
+	}
 
 
 	/**

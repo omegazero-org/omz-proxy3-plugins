@@ -50,13 +50,7 @@ public class LRUCache implements ResourceCache {
 
 	@Override
 	public synchronized CacheEntry fetch(String primaryKey) {
-		CacheEntry entry = this.cache.get(primaryKey);
-		if(entry != null && entry.isStale()){
-			this.cache.remove(primaryKey);
-			this.cacheSize -= entry.getSize();
-			return null;
-		}else
-			return entry;
+		return this.cache.get(primaryKey);
 	}
 
 	@Override
@@ -85,12 +79,15 @@ public class LRUCache implements ResourceCache {
 		Iterator<CacheEntry> iterator = this.cache.values().iterator();
 		while(iterator.hasNext()){
 			CacheEntry entry = iterator.next();
-			if(entry.isStale())
+			if(entry.isStale()){
 				iterator.remove();
+				this.cacheSize -= entry.getSize();
+			}
 		}
 	}
 
 	@Override
+	@SuppressWarnings("deprecation")
 	public void setMaxCacheSize(long bytes) {
 		this.maxCacheSize = bytes;
 	}
