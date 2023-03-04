@@ -245,8 +245,12 @@ public class CachePlugin {
 			}
 
 			this.addHeaders(res, entry, true);
-			if(entry.isStale())
-				res.addHeader("warning", "111 - \"response is stale, upstream server unreachable\"");
+			if(error){
+				if(entry.isStale())
+					res.addHeader("warning", "111 - \"upstream server unreachable, response is stale\"");
+				else
+					res.addHeader("warning", "111 - \"upstream server unreachable\"");
+			}
 			logger.debug("Serving cached response for request '", key, "' (proxy error: ", error, ", stale: ", entry.isStale(), ")");
 			HTTPResponseData resdata = new HTTPResponseData(res, data);
 			Proxy.getInstance().dispatchEvent(EVENT_CACHE_HIT, request, resdata);
