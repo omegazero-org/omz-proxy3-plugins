@@ -34,9 +34,9 @@ public class ServerTimingPlugin {
 
 
 	@ConfigurationOption
-	private boolean addStart;
+	private boolean addStart = true;
 	@ConfigurationOption
-	private boolean subtractOriginTiming;
+	private boolean subtractOriginTiming = true;
 
 	private String headerVal;
 
