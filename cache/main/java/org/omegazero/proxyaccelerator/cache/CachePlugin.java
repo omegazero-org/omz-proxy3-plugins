@@ -51,6 +51,7 @@ public class CachePlugin {
 	public static final Event EVENT_CACHE_HIT = new Event("cache_hit", new Class<?>[] { ProxyHTTPRequest.class, HTTPResponseData.class });
 	public static final Event EVENT_CACHE_MISS = new Event("cache_miss", new Class<?>[] { ProxyHTTPRequest.class });
 	public static final Event EVENT_CACHE_PURGE = new Event("cache_purge", new Class<?>[] { ProxyHTTPRequest.class });
+	public static final Event EVENT_CACHE_CANDIDATE = new Event("cache_candidate", new Class<?>[] { HTTPResponse.class, CacheEntry.Properties.class });
 	public static final Event EVENT_CACHE_STORE = new Event("cache_store", new Class<?>[] { CacheEntry.class });
 
 
@@ -274,6 +275,7 @@ public class CachePlugin {
 		CacheConfig cc = this.getConfig(upstreamServer);
 		CacheEntry.Properties properties = cc.getResourceProperties(response);
 		if(properties != null){
+			Proxy.getInstance().dispatchEvent(EVENT_CACHE_CANDIDATE, response, properties);
 			synchronized(this.pendingCacheEntries){
 				for(PendingCacheEntry p : this.pendingCacheEntries.values()){
 					if(p.key.equals(key)) // there is already a pending entry for this key
