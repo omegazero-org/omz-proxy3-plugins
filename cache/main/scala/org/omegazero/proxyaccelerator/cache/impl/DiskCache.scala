@@ -6,7 +6,7 @@
  */
 package org.omegazero.proxyaccelerator.cache.impl;
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, IOException, ObjectInputStream};
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, IOException, ObjectInputStream, Serializable};
 import java.nio.charset.StandardCharsets;
 import java.nio.file.{Files, FileVisitResult, Path, Paths, SimpleFileVisitor};
 import java.nio.file.attribute.BasicFileAttributes;
@@ -14,6 +14,9 @@ import java.security.MessageDigest;
 import java.util.{Arrays, List};
 import java.util.function.{BiConsumer, Predicate};
 import java.util.zip.{DeflaterOutputStream, InflaterInputStream};
+
+import scala.collection.mutable.ListBuffer;
+import scala.collection.mutable.Map;
 
 import org.omegazero.common.config.ConfigObject;
 import org.omegazero.common.logging.Logger;
@@ -24,23 +27,6 @@ object DiskCache {
 
 	private final val logger = Logger.create();
 
-
-	// https://stackoverflow.com/a/19877372
-	def getDirectorySize(path: Path): Long = {
-		var size = new java.util.concurrent.atomic.AtomicLong(0);
-		walkFileTree(path, (file, attr) => {
-			size.addAndGet(attr.size());
-		});
-		return size.get();
-	}
-
-	def walkFileTree(path: Path): List[(Path, BasicFileAttributes)] = {
-		var m = new java.util.ArrayList[(Path, BasicFileAttributes)]();
-		walkFileTree(path, (file, attr) => {
-			m.add((file, attr));
-		});
-		return m;
-	}
 
 	def walkFileTree(path: Path, func: (Path, BasicFileAttributes) => Unit): Unit = {
 		Files.walkFileTree(path, new SimpleFileVisitor[Path] {
@@ -65,24 +51,22 @@ class DiskCache(private var config: ConfigObject) extends ResourceCache {
 	private val compress = config.optBoolean("compress", true);
 	private val rewriteDelay = config.optLong("rewriteDelay", 5000);
 
-	private var enabled = false;
-	private var currentSize: Long = 0;
+	private var manager: DiskCacheManager = null;
 
 	if(Files.isDirectory(this.cacheBaseDir)){
-		this.enabled = true;
-		this.currentSize = DiskCache.getDirectorySize(this.cacheBaseDir);
-		logger.debug("Configured cacheBaseDir '", this.cacheBaseDir, "' has ", this.currentSize, " of ", this.maxSize, " bytes");
+		this.manager = new DiskCacheManager(this.cacheBaseDir, this.maxSize);
+		logger.debug("Configured cacheBaseDir '", this.cacheBaseDir, "' has ", this.manager.size, " of ", this.manager.maxSize, " bytes");
 	}else{
 		logger.warn("Given cacheBaseDir '", this.cacheBaseDir, "' is not a directory, cache will not be enabled");
 	}
 
 
 	override def store(primaryKey: String, entry: CacheEntry): Unit = {
-		if(!this.enabled || entry.getSize() > this.maxSize)
+		if(this.manager == null || entry.getSize() > this.maxSize)
 			return;
-		var filePath = this.getFilePath(primaryKey);
-		var (existingSize: Long, existingMtime: Long) = if Files.isReadable(filePath) then (Files.size(filePath), Files.getLastModifiedTime(filePath).toMillis()) else (0L, 0L);
-		if(System.currentTimeMillis() - existingMtime < this.rewriteDelay){
+		var id = ArrayUtil.toHexString(this.manager.sha256(Right(primaryKey)));
+		var filePath = this.manager.filePath(id);
+		if(Files.isReadable(filePath) && System.currentTimeMillis() - Files.getLastModifiedTime(filePath).toMillis() < this.rewriteDelay){
 			logger.debug("Skipped storing of entry with '", primaryKey, "' because file '", filePath, "' was recently modified");
 			return;
 		}
@@ -104,65 +88,57 @@ class DiskCache(private var config: ConfigObject) extends ResourceCache {
 			data = baos.toByteArray();
 			if(data.length > this.maxSize)
 				return;
-			this.synchronized {
-				var addSize = data.length - existingSize;
-				this.purgeOldEntries(addSize);
-				logger.debug("Storing entry with primary key '", primaryKey, "' at '", filePath, "' (", data.length, " bytes, adding ", addSize, " bytes)");
-				Files.write(filePath, data);
-				this.currentSize += addSize;
-			}
+			logger.debug("Storing entry with primary key '", primaryKey, "' (", id, "; ", data.length, " bytes)");
+			this.manager += (id, data, None);
 		}catch{
-			case e: Exception => logger.warn("Error while storing entry with primary key '", primaryKey, "' to '", filePath, "': ", e);
+			case e: Exception => logger.warn("Error while storing entry with primary key '", primaryKey, "' (", id, "): ", e);
 		}
 	}
 
 	override def fetch(primaryKey: String): CacheEntry = {
-		if(!this.enabled)
+		if(this.manager == null)
 			return null;
-		var filePath = this.getFilePath(primaryKey);
+		var id = ArrayUtil.toHexString(this.manager.sha256(Right(primaryKey)));
 		try{
-			var data = this.synchronized {
-				if(!Files.isReadable(filePath))
-					return null;
-				Files.readAllBytes(filePath);
-			};
-			var bais = new ByteArrayInputStream(data);
-			var hdr = bais.read();
-			var version = (hdr & 0xe0) >> 5;
-			if(version != 1)
-				throw new IOException("Unsupported resource version: " + version);
-
-			var inputStream = if((hdr & 0x01) != 0) then new InflaterInputStream(bais) else bais;
-			var objStream = new ObjectInputStream(inputStream);
-			var obj = objStream.readObject();
-			objStream.close();
-			return obj.asInstanceOf[CacheEntry];
+			var entry = this.manager.get(id);
+			if(!entry.isDefined)
+				return null;
+			return this.readEntryData(entry.get.data);
 		}catch{
-			case e: Exception => logger.warn("Error while reading entry with primary key '", primaryKey, "' from '", filePath, "': ", e);
+			case e: Exception => logger.warn("Error while reading entry with primary key '", primaryKey, "' (", id, "): ", e);
 			return null;
 		}
 	}
 
 	override def delete(primaryKey: String): CacheEntry = {
-		var entry = this.fetch(primaryKey);
-		if(entry == null)
+		if(this.manager == null)
 			return null;
-		var filePath = this.getFilePath(primaryKey);
+		var id = ArrayUtil.toHexString(this.manager.sha256(Right(primaryKey)));
 		try{
-			this.synchronized {
-				logger.debug("Deleted entry with primary key '", primaryKey, "' at '", filePath, "'");
-				var size = Files.size(filePath);
-				Files.delete(filePath);
-				this.currentSize -= size;
-			}
+			var entry = this.manager.get(id);
+			if(entry.isDefined){
+				var entryData = this.readEntryData(entry.get.data);
+				this.manager -= id;
+				logger.debug("Deleted entry with primary key '", primaryKey, "' (", id, ")");
+				return entryData;
+			}else
+				return null;
 		}catch{
-			case e: Exception => logger.warn("Error while deleting entry with primary key '", primaryKey, "' at '", filePath, "': ", e);
+			case e: Exception => logger.warn("Error while deleting entry with primary key '", primaryKey, "' (", id, "): ", e);
+			return null;
 		}
-		return entry;
 	}
 
-	//override def deleteIfKey(filter: Predicate[String]): Int = {
-	//}
+	override def deleteIfKey(filter: Predicate[String]): Int = {
+		if(this.manager == null)
+			return 0;
+		try{
+			return this.manager.removeIf(filter.test(_));
+		}catch{
+			case e: Exception => logger.warn("Error while deleting entries with Predicate: ", e);
+			return 0;
+		}
+	}
 
 	override def cleanup(): Unit = {
 	}
@@ -170,34 +146,137 @@ class DiskCache(private var config: ConfigObject) extends ResourceCache {
 	override def close(): Unit = {
 	}
 
+	private def readEntryData(data: Array[Byte]): CacheEntry = {
+		var bais = new ByteArrayInputStream(data);
+		var hdr = bais.read();
+		var version = (hdr & 0xe0) >> 5;
+		if(version != 1)
+			throw new IOException("Unsupported resource version: " + version);
 
-	private def purgeOldEntries(newSize: Long): Unit = {
-		if(newSize > this.maxSize)
-			throw new IllegalArgumentException("newSize is larger than maxSize");
-		if(this.maxSize - this.currentSize >= newSize)
-			return;
-		logger.debug("Searching for oldest file to delete because maxSize will be exceeded: ", this.currentSize, " + ", newSize, " > ", this.maxSize);
-		this.synchronized {
-			var files = DiskCache.walkFileTree(this.cacheBaseDir);
-			files.sort((e1, e2) => (e2(1).lastModifiedTime().toMillis() - e1(1).lastModifiedTime().toMillis()).toInt);
-			while(this.maxSize - this.currentSize < newSize && files.size() > 0){
-				var file = files.remove(files.size() - 1);
-				logger.debug("Deleting oldest file '", file(0), "'");
-				Files.delete(file(0));
-				this.currentSize -= file(1).size();
-			}
-			if(files.size() == 0)
-				this.currentSize = 0;
+		var inputStream = if((hdr & 0x01) != 0) then new InflaterInputStream(bais) else bais;
+		var objStream = new ObjectInputStream(inputStream);
+		var obj = objStream.readObject();
+		objStream.close();
+		return obj.asInstanceOf[CacheEntry];
+	}
+}
+
+class DiskCacheManager(val directory: Path, val maxSize: Long, checkValid: String => Boolean = (_) => true) {
+
+	val rentries = Map[String, Entry]();
+	DiskCache.walkFileTree(this.directory, (path, attrs) => {
+		val fname = path.getFileName().toString();
+		if(!checkValid(fname)){
+			Files.delete(path);
+		}else if(fname.endsWith(".ser")){
+			val id = fname.substring(0, fname.length() - 4);
+			if(rentries.contains(id))
+				rentries(id).separateMetadata = true;
+			else
+				rentries += (id -> new Entry(attrs.lastModifiedTime().toMillis(), id, 0, true));
+		}else{
+			if(rentries.contains(fname))
+				rentries(fname).size = attrs.size();
+			else
+				rentries += (fname -> new Entry(attrs.lastModifiedTime().toMillis(), fname, attrs.size(), false));
+		}
+	});
+
+	private val diskEntries = rentries.valuesIterator.to(ListBuffer).sortWith(_.mtime < _.mtime);
+
+	def size: Long = this.synchronized {
+		var total: Long = 0;
+		for(entry <- diskEntries){
+			total += entry.size;
+		}
+		return total;
+	}
+
+	def purgeOldEntries(newSize: Long = 0): Unit = this.synchronized {
+		var curSize = this.size;
+		while(curSize + newSize > this.maxSize && !this.diskEntries.isEmpty){
+			var entry = this.removeIndex(0);
+			curSize -= entry.size;
 		}
 	}
 
-	private def getFilePath(primaryKey: String): Path = {
-		return this.cacheBaseDir.resolve(ArrayUtil.toHexString(this.sha256(primaryKey.getBytes(StandardCharsets.UTF_8))));
+	def add(id: String, data: Array[Byte], metadata: Option[Serializable] = None): Unit = this.synchronized {
+		this.addSpecial(id, data.length, metadata, Files.write(_, data));
 	}
 
-	private def sha256(data: Array[Byte]): Array[Byte] = {
-		var md = MessageDigest.getInstance("SHA-256");
-		md.update(data);
+	def addSpecial(id: String, dataLen: Long, metadata: Option[Serializable] = None, writeData: Path => Unit): Unit = this.synchronized {
+		val existingEntry = this.diskEntries.find(_.id == id);
+		if(existingEntry.isEmpty || existingEntry.get.size < dataLen)
+			this.purgeOldEntries(dataLen - (if existingEntry.isDefined then existingEntry.get.size else 0));
+		writeData(this.filePath(id));
+		if(metadata.isDefined)
+			Files.write(this.filePath(id, true), SerializationUtil.serialize(metadata.get));
+		var entry: Entry = null;
+		if(existingEntry.isDefined){
+			entry = existingEntry.get;
+			entry.mtime = System.currentTimeMillis();
+			entry.size = dataLen;
+		}else{
+			entry = new Entry(System.currentTimeMillis(), id, dataLen, metadata.isDefined);
+			if(this.diskEntries.size > 0 && this.diskEntries.last.mtime > entry.mtime)
+				this.diskEntries.insert(this.diskEntries.indexWhere(_.mtime > entry.mtime), entry);
+			else
+				this.diskEntries += entry;
+		}
+	}
+
+	def get(id: String): Option[Entry] = {
+		val i = this.diskEntries.indexWhere(_.id == id);
+		return if i >= 0 then Some(this.diskEntries(i)) else None;
+	}
+
+	def remove(id: String): Option[Entry] = {
+		val i = this.diskEntries.indexWhere(_.id == id);
+		return if i >= 0 then Some(this.removeIndex(i)) else None;
+	}
+
+	def removeIf(predicate: String => Boolean): Int = {
+		var count = 0;
+		var i = 0;
+		while(i < diskEntries.length){
+			if(predicate(this.diskEntries(i).id)){
+				this.removeIndex(i);
+				count = count + 1;
+			}else
+				i = i + 1;
+		}
+		return count;
+	}
+
+	private def removeIndex(index: Int): Entry = {
+		val entry = this.diskEntries.remove(index);
+		Files.deleteIfExists(this.filePath(entry.id, true));
+		Files.deleteIfExists(this.filePath(entry.id));
+		return entry;
+	}
+
+	def filePath(id: String, metadata: Boolean = false): Path = this.directory.resolve(if metadata then id + ".ser" else id);
+
+	def += = this.add;
+	def -= = this.remove;
+
+	def sha256(data: Either[Array[Byte], String]): Array[Byte] = {
+		val md = MessageDigest.getInstance("SHA-256");
+		md.update(data match {
+			case Left(bytes) => bytes;
+			case Right(str) => str.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+		});
 		return md.digest();
+	}
+
+
+	class Entry(var mtime: Long, val id: String, var size: Long, var separateMetadata: Boolean) {
+
+		def data: Array[Byte] = Files.readAllBytes(DiskCacheManager.this.filePath(this.id));
+
+		def metadata: Option[Object] = {
+			val path = DiskCacheManager.this.filePath(this.id, true);
+			return if Files.isReadable(path) then Some(SerializationUtil.deserialize(Files.readAllBytes(path))) else None;
+		}
 	}
 }
