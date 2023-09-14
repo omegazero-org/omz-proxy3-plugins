@@ -57,6 +57,8 @@ public class XForwardedForPlugin {
 	private boolean forwardHeader = true;
 	@ConfigurationOption
 	private boolean enableForwardProto = true;
+	@ConfigurationOption
+	private boolean allowForwardProtoMultiple = true;
 
 	private Object[] expectedParts;
 
@@ -100,8 +102,12 @@ public class XForwardedForPlugin {
 		}
 		if(this.enableUpstream)
 			http.appendHeader(HEADER_XFF, addressToString((InetSocketAddress) downstreamConnection.getRemoteAddress(), this.includePortNumber));
-		if(this.enableForwardProto)
-			http.appendHeader(HEADER_XFP, http.getScheme());
+		if(this.enableForwardProto){
+			if(this.allowForwardProtoMultiple)
+				http.appendHeader(HEADER_XFP, http.getScheme());
+			else
+				http.setHeader(HEADER_XFP, http.getScheme());
+		}
 	}
 
 

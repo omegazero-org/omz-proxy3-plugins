@@ -19,4 +19,5 @@ Configuration ID: `xforwardedfor`
 | enableUpstream | boolean | Enable adding XFF headers or header values in forwarded requests. Note that any existing XFF header values will still be forwarded if this is `false`. | no | `true` |
 | forwardHeader | boolean | Enable forwarding an existing XFF and XFP header value in a request. | no | `true` |
 | enableForwardProto | boolean | Enable adding a XFP header in forwarded requests. | no | `true` |
+| allowForwardProtoMultiple | boolean | If `true`, new values of `x-forwarded-proto` will be added to previous values (forming a list); this may not be supported by all servers. Otherwise, the header is overwritten with the newest value. To retain a previous value, set `enableForwardProto` to `false` instead. | no | `true` |
 
